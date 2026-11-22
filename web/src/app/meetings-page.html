@@ -1,0 +1,18 @@
+<main class="page">
+  <header>
+    <div>
+      <p class="eyebrow">T-Retro</p>
+      <h1>Мои встречи</h1>
+    </div>
+    <button tuiButton type="button" appearance="secondary" (click)="logout()">Выйти</button>
+  </header>
+
+  @if (auth.user(); as employee) {
+    <p>Вы вошли как {{ employee.displayName }}.</p>
+  }
+
+  <section class="empty">
+    <h2>Встреч пока нет</h2>
+    <p>Создание и список встреч появятся на этапе M1.</p>
+  </section>
+</main>

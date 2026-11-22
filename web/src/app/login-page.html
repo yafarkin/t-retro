@@ -1,0 +1,27 @@
+<main class="page">
+  <section class="card" aria-labelledby="login-title">
+    <p class="eyebrow">T-Retro</p>
+    <h1 id="login-title">Локальный вход</h1>
+    <p>Используйте разные идентификаторы в независимых браузерных профилях.</p>
+
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <label for="subject">Идентификатор сотрудника</label>
+      <tui-textfield class="field">
+        <input id="subject" tuiTextfield formControlName="subject" autocomplete="username" />
+      </tui-textfield>
+
+      <label for="display-name">Отображаемое имя</label>
+      <tui-textfield class="field">
+        <input id="display-name" tuiTextfield formControlName="displayName" autocomplete="name" />
+      </tui-textfield>
+
+      @if (auth.errorMessage(); as message) {
+        <p class="error" role="alert">{{ message }}</p>
+      }
+
+      <button tuiButton type="submit" [disabled]="auth.busy()">
+        {{ auth.busy() ? 'Входим…' : 'Войти' }}
+      </button>
+    </form>
+  </section>
+</main>

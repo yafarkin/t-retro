@@ -1,0 +1,14 @@
+.tools/
+.DS_Store
+**/bin/
+**/obj/
+TestResults/
+coverage/
+web/node_modules/
+web/dist/
+web/.angular/
+**/data/*.db
+**/data/*.db-shm
+**/data/*.db-wal
+*.user
+*.suo

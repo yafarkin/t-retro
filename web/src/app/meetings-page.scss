@@ -1,0 +1,23 @@
+.page {
+  width: min(100% - 2rem, 72rem);
+  margin: 0 auto;
+  padding: 2rem 0;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.eyebrow {
+  color: var(--tui-text-secondary);
+}
+
+.empty {
+  margin-top: 2rem;
+  padding: 2rem;
+  border: 1px dashed var(--tui-border-normal);
+  border-radius: 1rem;
+}

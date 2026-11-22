@@ -1,0 +1,6 @@
+<tui-root>
+  @if (!connection.online()) {
+    <div class="connection-banner" role="status">Нет сети. Изменения временно недоступны.</div>
+  }
+  <router-outlet />
+</tui-root>
