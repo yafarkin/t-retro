@@ -5,7 +5,8 @@ namespace Application;
 public sealed class InvitationService(
     IMeetingRepository meetings,
     MeetingAccessService access,
-    IInvitationTokenService tokens)
+    IInvitationTokenService tokens,
+    IMeetingNotifier notifier)
 {
     public async Task<(string Token, int Version)> GetAsync(
         Guid userId,
@@ -28,6 +29,8 @@ public sealed class InvitationService(
             throw new ConflictException("VersionConflict", "Приглашение изменилось. Обновите состояние и повторите.");
         }
 
+        var snapshot = await access.GetAsync(userId, meetingId, false, cancellationToken);
+        await notifier.StateChangedAsync(meetingId, snapshot.Meeting.Version, cancellationToken);
         return (tokens.Create(meetingId, version), version);
     }
 
@@ -46,14 +49,23 @@ public sealed class InvitationService(
             userId,
             invitation.Version,
             cancellationToken);
-        return result switch
+        switch (result)
         {
-            JoinMeetingResult.Joined or JoinMeetingResult.AlreadyMember => invitation.MeetingId,
-            JoinMeetingResult.NotFound => throw new NotFoundException("Встреча не найдена."),
-            JoinMeetingResult.Closed => throw new ConflictException("MeetingClosed", "Встреча уже завершена."),
-            JoinMeetingResult.InvitationMismatch => throw new ConflictException("InvitationRevoked", "Ссылка приглашения больше не действует."),
-            JoinMeetingResult.Excluded => throw new ForbiddenException("AccessRevoked", "Доступ к встрече закрыт."),
-            _ => throw new InvalidOperationException("Unknown join result."),
-        };
+            case JoinMeetingResult.NotFound:
+                throw new NotFoundException("Встреча не найдена.");
+            case JoinMeetingResult.Closed:
+                throw new ConflictException("MeetingClosed", "Встреча уже завершена.");
+            case JoinMeetingResult.InvitationMismatch:
+                throw new ConflictException("InvitationRevoked", "Ссылка приглашения больше не действует.");
+            case JoinMeetingResult.Excluded:
+                throw new ForbiddenException("AccessRevoked", "Доступ к встрече закрыт.");
+        }
+
+        if (result == JoinMeetingResult.Joined)
+        {
+            await notifier.PresenceChangedAsync(invitation.MeetingId, cancellationToken);
+        }
+
+        return invitation.MeetingId;
     }
 }

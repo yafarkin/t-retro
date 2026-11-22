@@ -32,7 +32,8 @@ public static class ApiMappings
                 participant.UserId.ToString(),
                 participant.Subject,
                 participant.DisplayName,
-                participant.Status.ToString())).ToArray());
+                participant.Status.ToString(),
+                participant.IsOnline)).ToArray());
 
     public static ColumnInput ToInput(ColumnRequest column) => new(column.Name, column.Color);
 }

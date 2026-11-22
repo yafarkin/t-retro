@@ -54,3 +54,13 @@ select {
   flex-wrap: wrap;
   gap: 1rem;
 }
+
+.revoked {
+  margin-top: 2rem;
+  border-color: var(--tui-status-negative);
+}
+
+.connection,
+.presence {
+  color: var(--tui-text-secondary);
+}

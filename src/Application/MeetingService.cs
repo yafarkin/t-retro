@@ -4,7 +4,8 @@ namespace Application;
 
 public sealed class MeetingService(
     IMeetingRepository meetings,
-    MeetingAccessService access)
+    MeetingAccessService access,
+    IMeetingNotifier notifier)
 {
     public async Task<MeetingSnapshot> CreateAsync(
         Guid userId,
@@ -36,7 +37,9 @@ public sealed class MeetingService(
         var meetingColumns = CreateColumns(meetingId, columns);
         var creator = new MeetingMember(meetingId, userId, MemberStatus.Active, now, null);
         await meetings.CreateAsync(meeting, meetingColumns, creator, cancellationToken);
-        return await access.GetAsync(userId, meetingId, false, cancellationToken);
+        var snapshot = await access.GetAsync(userId, meetingId, false, cancellationToken);
+        await notifier.StateChangedAsync(meetingId, snapshot.Meeting.Version, cancellationToken);
+        return snapshot;
     }
 
     public Task<MeetingSnapshot> GetStateAsync(
@@ -91,7 +94,9 @@ public sealed class MeetingService(
             throw new ConflictException("VersionConflict", "Настройки изменились. Обновите состояние и повторите сохранение.");
         }
 
-        return await access.GetAsync(userId, meetingId, false, cancellationToken);
+        var snapshot = await access.GetAsync(userId, meetingId, false, cancellationToken);
+        await notifier.StateChangedAsync(meetingId, snapshot.Meeting.Version, cancellationToken);
+        return snapshot;
     }
 
     private static IReadOnlyList<MeetingColumn> CreateColumns(

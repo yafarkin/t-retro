@@ -42,4 +42,12 @@ export class MeetingService {
   join(token: string): Observable<{ meetingId: string }> {
     return this.http.post<{ meetingId: string }>('/api/join', { token });
   }
+
+  exclude(meetingId: string, userId: string): Observable<void> {
+    return this.http.post<void>(`/api/meetings/${meetingId}/members/${userId}/exclude`, {});
+  }
+
+  transfer(meetingId: string, userId: string): Observable<void> {
+    return this.http.put<void>(`/api/meetings/${meetingId}/facilitator`, { userId });
+  }
 }

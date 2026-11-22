@@ -268,6 +268,283 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         return JoinMeetingResult.Joined;
     }
 
+    public async Task<bool> ExcludeMemberAsync(
+        Guid meetingId,
+        Guid facilitatorId,
+        Guid targetUserId,
+        DateTimeOffset excludedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var affected = await connection.ExecuteAsync(
+            """
+            UPDATE members
+            SET status = 'Excluded', excluded_at_utc = @ExcludedAtUtc
+            WHERE meeting_id = @MeetingId
+              AND user_id = @TargetUserId
+              AND user_id <> @FacilitatorId
+              AND status = 'Active'
+              AND EXISTS (
+                  SELECT 1 FROM meetings
+                  WHERE id = @MeetingId AND facilitator_id = @FacilitatorId AND phase <> 'Closed');
+            """,
+            new
+            {
+                MeetingId = meetingId.ToString(),
+                TargetUserId = targetUserId.ToString(),
+                FacilitatorId = facilitatorId.ToString(),
+                ExcludedAtUtc = excludedAtUtc.ToString("O"),
+            },
+            transaction);
+        if (affected == 0)
+        {
+            return false;
+        }
+
+        await connection.ExecuteAsync(
+            "DELETE FROM readiness WHERE meeting_id = @MeetingId AND user_id = @UserId;",
+            new { MeetingId = meetingId.ToString(), UserId = targetUserId.ToString() },
+            transaction);
+        await connection.ExecuteAsync(
+            """
+            UPDATE meetings
+            SET version = version + 1,
+                facilitator_generation = facilitator_generation + 1,
+                facilitator_election_deadline_utc = CASE
+                    WHEN facilitator_id = @TargetUserId THEN NULL
+                    ELSE facilitator_election_deadline_utc END,
+                facilitator_id = CASE
+                    WHEN facilitator_id = @TargetUserId THEN NULL
+                    ELSE facilitator_id END,
+                updated_at_utc = @Now
+            WHERE id = @MeetingId;
+            """,
+            new
+            {
+                MeetingId = meetingId.ToString(),
+                TargetUserId = targetUserId.ToString(),
+                Now = excludedAtUtc.ToString("O"),
+            },
+            transaction);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> TransferFacilitatorAsync(
+        Guid meetingId,
+        Guid currentFacilitatorId,
+        Guid targetUserId,
+        DateTimeOffset? electionDeadlineUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        var affected = await connection.ExecuteAsync(
+            """
+            UPDATE meetings
+            SET facilitator_id = @TargetUserId,
+                facilitator_election_deadline_utc = @Deadline,
+                facilitator_generation = facilitator_generation + 1,
+                version = version + 1,
+                updated_at_utc = @Now
+            WHERE id = @MeetingId
+              AND facilitator_id = @CurrentFacilitatorId
+              AND facilitator_id <> @TargetUserId
+              AND phase <> 'Closed'
+              AND EXISTS (
+                  SELECT 1 FROM members
+                  WHERE meeting_id = @MeetingId AND user_id = @TargetUserId AND status = 'Active');
+            """,
+            new
+            {
+                MeetingId = meetingId.ToString(),
+                TargetUserId = targetUserId.ToString(),
+                CurrentFacilitatorId = currentFacilitatorId.ToString(),
+                Deadline = electionDeadlineUtc?.ToString("O"),
+                Now = DateTimeOffset.UtcNow.ToString("O"),
+            });
+        return affected > 0;
+    }
+
+    public async Task<bool> ScheduleElectionAsync(
+        Guid meetingId,
+        Guid facilitatorId,
+        DateTimeOffset deadlineUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        var affected = await connection.ExecuteAsync(
+            """
+            UPDATE meetings
+            SET facilitator_election_deadline_utc = @Deadline,
+                facilitator_generation = facilitator_generation + 1
+            WHERE id = @MeetingId AND facilitator_id = @FacilitatorId AND phase <> 'Closed';
+            """,
+            new
+            {
+                MeetingId = meetingId.ToString(),
+                FacilitatorId = facilitatorId.ToString(),
+                Deadline = deadlineUtc.ToString("O"),
+            });
+        return affected > 0;
+    }
+
+    public async Task<bool> CancelElectionAsync(
+        Guid meetingId,
+        Guid facilitatorId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        var affected = await connection.ExecuteAsync(
+            """
+            UPDATE meetings
+            SET facilitator_election_deadline_utc = NULL,
+                facilitator_generation = facilitator_generation + 1
+            WHERE id = @MeetingId AND facilitator_id = @FacilitatorId;
+            """,
+            new { MeetingId = meetingId.ToString(), FacilitatorId = facilitatorId.ToString() });
+        return affected > 0;
+    }
+
+    public async Task<bool> AssignFacilitatorIfVacantAsync(
+        Guid meetingId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        var affected = await connection.ExecuteAsync(
+            """
+            UPDATE meetings
+            SET facilitator_id = @UserId,
+                facilitator_election_deadline_utc = NULL,
+                facilitator_generation = facilitator_generation + 1,
+                version = version + 1,
+                updated_at_utc = @Now
+            WHERE id = @MeetingId
+              AND facilitator_id IS NULL
+              AND phase <> 'Closed'
+              AND EXISTS (
+                  SELECT 1 FROM members
+                  WHERE meeting_id = @MeetingId AND user_id = @UserId AND status = 'Active');
+            """,
+            new
+            {
+                MeetingId = meetingId.ToString(),
+                UserId = userId.ToString(),
+                Now = DateTimeOffset.UtcNow.ToString("O"),
+            });
+        return affected > 0;
+    }
+
+    public async Task<IReadOnlyList<Guid>> ScheduleRecoveryAsync(
+        DateTimeOffset deadlineUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var meetingIds = (await connection.QueryAsync<string>(
+            """
+            SELECT id FROM meetings
+            WHERE facilitator_id IS NOT NULL
+              AND facilitator_election_deadline_utc IS NULL
+              AND phase <> 'Closed';
+            """,
+            transaction)).ToArray();
+        await connection.ExecuteAsync(
+            """
+            UPDATE meetings
+            SET facilitator_election_deadline_utc = @Deadline,
+                facilitator_generation = facilitator_generation + 1
+            WHERE facilitator_id IS NOT NULL
+              AND facilitator_election_deadline_utc IS NULL
+              AND phase <> 'Closed';
+            """,
+            new { Deadline = deadlineUtc.ToString("O") },
+            transaction);
+        await transaction.CommitAsync(cancellationToken);
+        return meetingIds.Select(Guid.Parse).ToArray();
+    }
+
+    public async Task<IReadOnlyList<FacilitatorElection>> GetDueElectionsAsync(
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        var rows = await connection.QueryAsync<ElectionRow>(
+            """
+            SELECT id AS MeetingId, facilitator_id AS FacilitatorId,
+                   facilitator_election_deadline_utc AS DeadlineUtc,
+                   facilitator_generation AS Generation
+            FROM meetings
+            WHERE facilitator_election_deadline_utc IS NOT NULL
+              AND facilitator_election_deadline_utc <= @Now
+              AND phase <> 'Closed';
+            """,
+            new { Now = nowUtc.ToString("O") });
+        return rows.Select(row => new FacilitatorElection(
+            Guid.Parse(row.MeetingId),
+            row.FacilitatorId is null ? null : Guid.Parse(row.FacilitatorId),
+            SqliteMapping.Time(row.DeadlineUtc),
+            row.Generation)).ToArray();
+    }
+
+    public async Task<bool> CompleteElectionAsync(
+        Guid meetingId,
+        Guid? expectedFacilitatorId,
+        int expectedGeneration,
+        Guid? newFacilitatorId,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var current = await connection.QuerySingleOrDefaultAsync<ElectionRow>(
+            """
+            SELECT id AS MeetingId, facilitator_id AS FacilitatorId,
+                   facilitator_election_deadline_utc AS DeadlineUtc,
+                   facilitator_generation AS Generation
+            FROM meetings WHERE id = @MeetingId;
+            """,
+            new { MeetingId = meetingId.ToString() },
+            transaction);
+        if (current is null
+            || current.Generation != expectedGeneration
+            || current.FacilitatorId != expectedFacilitatorId?.ToString()
+            || (current.DeadlineUtc is not null && SqliteMapping.Time(current.DeadlineUtc) > nowUtc))
+        {
+            return false;
+        }
+
+        var affected = await connection.ExecuteAsync(
+            """
+            UPDATE meetings
+            SET facilitator_id = @NewFacilitatorId,
+                facilitator_election_deadline_utc = NULL,
+                facilitator_generation = facilitator_generation + 1,
+                version = version + 1,
+                updated_at_utc = @Now
+            WHERE id = @MeetingId
+              AND facilitator_generation = @ExpectedGeneration
+              AND facilitator_id = @ExpectedFacilitatorId
+              AND facilitator_election_deadline_utc <= @Now
+              AND phase <> 'Closed'
+              AND (@NewFacilitatorId IS NULL OR EXISTS (
+                  SELECT 1 FROM members
+                  WHERE meeting_id = @MeetingId AND user_id = @NewFacilitatorId AND status = 'Active'));
+            """,
+            new
+            {
+                MeetingId = meetingId.ToString(),
+                NewFacilitatorId = newFacilitatorId?.ToString(),
+                ExpectedGeneration = expectedGeneration,
+                ExpectedFacilitatorId = expectedFacilitatorId?.ToString(),
+                Now = nowUtc.ToString("O"),
+            },
+            transaction);
+        await transaction.CommitAsync(cancellationToken);
+        return affected > 0;
+    }
+
     private static async Task InsertMeetingAsync(
         IDbConnection connection,
         IDbTransaction transaction,
@@ -350,6 +627,14 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             row.BoardVersion,
             SqliteMapping.Time(row.CreatedAtUtc),
             SqliteMapping.Time(row.UpdatedAtUtc));
+
+    private sealed class ElectionRow
+    {
+        public required string MeetingId { get; init; }
+        public string? FacilitatorId { get; init; }
+        public required string DeadlineUtc { get; init; }
+        public int Generation { get; init; }
+    }
 
     private sealed class MeetingRow
     {

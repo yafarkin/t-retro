@@ -2,7 +2,9 @@ using Domain;
 
 namespace Application;
 
-public sealed class MeetingAccessService(IMeetingRepository meetings)
+public sealed class MeetingAccessService(
+    IMeetingRepository meetings,
+    IPresenceService presence)
 {
     public async Task<MeetingSnapshot> GetAsync(
         Guid userId,
@@ -28,6 +30,10 @@ public sealed class MeetingAccessService(IMeetingRepository meetings)
             throw new ForbiddenException("FacilitatorRequired", "Действие доступно только фасилитатору.");
         }
 
-        return new MeetingSnapshot(state.Meeting, state.Columns, state.Participants, userId);
+        var participants = state.Participants.Select(participant => participant with
+        {
+            IsOnline = presence.IsOnline(meetingId, participant.UserId),
+        }).ToArray();
+        return new MeetingSnapshot(state.Meeting, state.Columns, participants, userId);
     }
 }

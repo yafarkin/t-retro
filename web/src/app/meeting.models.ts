@@ -40,6 +40,7 @@ export interface Participant {
   subject: string;
   displayName: string;
   status: 'Active' | 'Excluded';
+  isOnline: boolean;
 }
 
 export interface MeetingState extends MeetingSettingsPayload {

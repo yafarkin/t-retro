@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TuiButton } from '@taiga-ui/core';
@@ -13,11 +13,13 @@ import {
   MeetingTemplate,
 } from './meeting.models';
 import { MeetingService } from './meeting.service';
+import { MeetingSyncService } from './meeting-sync.service';
 import { TemplateService } from './template.service';
 
 @Component({
   selector: 'app-meeting-settings-page',
   imports: [FormsModule, MeetingForm, RouterLink, TuiButton],
+  providers: [MeetingSyncService],
   templateUrl: './meeting-settings-page.html',
   styleUrl: './meeting-settings-page.scss',
 })
@@ -26,16 +28,23 @@ export class MeetingSettingsPage {
   private readonly meetings = inject(MeetingService);
   private readonly templatesService = inject(TemplateService);
   private readonly meetingId = this.route.snapshot.paramMap.get('id')!;
+  readonly sync = inject(MeetingSyncService);
 
-  readonly state = signal<MeetingState | null>(null);
+  readonly state = this.sync.snapshot;
+  readonly revoked = this.sync.revoked;
   readonly templates = signal<MeetingTemplate[]>([]);
   readonly loading = signal(true);
   readonly busy = signal(false);
+  readonly commandsBlocked = computed(() => this.busy() || !this.sync.canModify());
   readonly error = signal<string | null>(null);
   readonly notice = signal<string | null>(null);
   readonly selectedTemplate = signal('');
+  readonly selectedMember = signal('');
   readonly invite = signal<{ url: string; version: number } | null>(null);
   readonly copied = signal(false);
+  readonly otherParticipants = computed(() =>
+    this.state()?.participants.filter((participant) =>
+      participant.status === 'Active' && participant.id !== this.state()?.facilitatorId) ?? []);
 
   readonly name = signal('');
   readonly columns = signal(defaultColumns());
@@ -43,18 +52,30 @@ export class MeetingSettingsPage {
   readonly privateCollection = signal(true);
   readonly anonymousVotes = signal(true);
   readonly voteSettings = signal(defaultVoteSettings());
+  private formVersion = 0;
 
   constructor() {
-    this.load();
+    effect(() => {
+      const incoming = this.sync.snapshot();
+      if (!incoming) {
+        return;
+      }
+      this.loading.set(false);
+      if (this.formVersion === 0 || incoming.version > this.formVersion) {
+        this.formVersion = incoming.version;
+        this.applyState(incoming);
+      }
+    });
     this.templatesService.list().subscribe({
       next: (templates) => this.templates.set(templates),
       error: (error: HttpErrorResponse) => this.error.set(apiErrorMessage(error)),
     });
+    void this.connect();
   }
 
   save(): void {
     const current = this.state();
-    if (!current) {
+    if (!current || this.commandsBlocked()) {
       return;
     }
 
@@ -63,7 +84,7 @@ export class MeetingSettingsPage {
     this.notice.set(null);
     this.meetings.update(this.meetingId, current.version, this.payload()).subscribe({
       next: (state) => {
-        this.applyState(state);
+        this.sync.replaceSnapshot(state);
         this.busy.set(false);
         this.notice.set('Настройки сохранены.');
       },
@@ -135,21 +156,57 @@ export class MeetingSettingsPage {
     navigator.clipboard.writeText(invite.url).then(() => this.copied.set(true));
   }
 
-  private load(): void {
-    this.meetings.state(this.meetingId).subscribe({
-      next: (state) => {
-        this.applyState(state);
-        this.loading.set(false);
+  excludeMember(): void {
+    const participant = this.otherParticipants().find((item) => item.id === this.selectedMember());
+    if (!participant || !window.confirm(`Исключить участника «${participant.displayName}»?`)) {
+      return;
+    }
+
+    this.meetings.exclude(this.meetingId, participant.id).subscribe({
+      next: () => {
+        this.selectedMember.set('');
+        this.notice.set('Участник исключён.');
+        void this.sync.refresh();
       },
-      error: (error: HttpErrorResponse) => {
-        this.error.set(apiErrorMessage(error));
-        this.loading.set(false);
-      },
+      error: (error: HttpErrorResponse) => this.error.set(apiErrorMessage(error)),
     });
   }
 
+  transferRole(): void {
+    const participant = this.otherParticipants().find((item) => item.id === this.selectedMember());
+    if (!participant || !window.confirm(`Передать роль участнику «${participant.displayName}»?`)) {
+      return;
+    }
+
+    this.meetings.transfer(this.meetingId, participant.id).subscribe({
+      next: () => {
+        this.selectedMember.set('');
+        this.notice.set('Роль фасилитатора передана.');
+        void this.sync.refresh();
+      },
+      error: (error: HttpErrorResponse) => this.error.set(apiErrorMessage(error)),
+    });
+  }
+
+  connectionText(): string {
+    const states = {
+      connected: 'Соединение активно',
+      reconnecting: 'Восстанавливаем соединение',
+      disconnected: 'Нет соединения',
+    };
+    return states[this.sync.connectionState()];
+  }
+
+  private async connect(): Promise<void> {
+    try {
+      await this.sync.connect(this.meetingId);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'Не удалось подключиться к встрече.');
+      this.loading.set(false);
+    }
+  }
+
   private applyState(state: MeetingState): void {
-    this.state.set(state);
     this.name.set(state.name);
     this.columns.set(state.columns.map((column) => ({ name: column.name, color: column.color })));
     this.anonymousCards.set(state.anonymousCards);

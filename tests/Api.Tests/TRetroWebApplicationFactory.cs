@@ -2,22 +2,31 @@ using Api;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Api.Tests;
 
 public sealed class TRetroWebApplicationFactory : WebApplicationFactory<Program>
 {
-    private readonly string directory = Path.Combine(Environment.CurrentDirectory, "TestData", Guid.NewGuid().ToString());
+    private readonly string directory;
     private readonly string environment;
+    private readonly bool deleteOnDispose;
 
-    public TRetroWebApplicationFactory(string environment = "Testing")
+    public TRetroWebApplicationFactory(string environment = "Testing", string? databasePath = null)
     {
         this.environment = environment;
-        DatabasePath = Path.Combine(directory, "test.db");
+        deleteOnDispose = databasePath is null;
+        DatabasePath = databasePath ?? Path.Combine(
+            Environment.CurrentDirectory,
+            "TestData",
+            Guid.NewGuid().ToString(),
+            "test.db");
+        directory = Path.GetDirectoryName(DatabasePath)!;
     }
 
     public string DatabasePath { get; }
+
+    public TestTimeProvider Time { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -25,13 +34,14 @@ public sealed class TRetroWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("ConnectionStrings:Default", $"Data Source={DatabasePath}");
         builder.UseSetting("Database:Provider", "SQLite");
         builder.UseSetting("DevAuthentication:Enabled", environment == "Testing" ? "true" : "false");
+        builder.ConfigureServices(services => services.AddSingleton<TimeProvider>(Time));
     }
 
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
         SqliteConnection.ClearAllPools();
-        if (Directory.Exists(directory))
+        if (deleteOnDispose && Directory.Exists(directory))
         {
             Directory.Delete(directory, true);
         }

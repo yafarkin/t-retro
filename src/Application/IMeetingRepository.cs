@@ -38,4 +38,50 @@ public interface IMeetingRepository
         Guid userId,
         int invitationVersion,
         CancellationToken cancellationToken);
+
+    Task<bool> ExcludeMemberAsync(
+        Guid meetingId,
+        Guid facilitatorId,
+        Guid targetUserId,
+        DateTimeOffset excludedAtUtc,
+        CancellationToken cancellationToken);
+
+    Task<bool> TransferFacilitatorAsync(
+        Guid meetingId,
+        Guid currentFacilitatorId,
+        Guid targetUserId,
+        DateTimeOffset? electionDeadlineUtc,
+        CancellationToken cancellationToken);
+
+    Task<bool> ScheduleElectionAsync(
+        Guid meetingId,
+        Guid facilitatorId,
+        DateTimeOffset deadlineUtc,
+        CancellationToken cancellationToken);
+
+    Task<bool> CancelElectionAsync(
+        Guid meetingId,
+        Guid facilitatorId,
+        CancellationToken cancellationToken);
+
+    Task<bool> AssignFacilitatorIfVacantAsync(
+        Guid meetingId,
+        Guid userId,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<Guid>> ScheduleRecoveryAsync(
+        DateTimeOffset deadlineUtc,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<FacilitatorElection>> GetDueElectionsAsync(
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken);
+
+    Task<bool> CompleteElectionAsync(
+        Guid meetingId,
+        Guid? expectedFacilitatorId,
+        int expectedGeneration,
+        Guid? newFacilitatorId,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken);
 }

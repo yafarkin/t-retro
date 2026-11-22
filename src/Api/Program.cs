@@ -55,6 +55,13 @@ public sealed partial class Program
         builder.Services.AddScoped<MeetingService>();
         builder.Services.AddScoped<TemplateService>();
         builder.Services.AddScoped<InvitationService>();
+        builder.Services.AddScoped<MemberService>();
+        builder.Services.AddScoped<FacilitatorElectionService>();
+        builder.Services.AddSingleton<IPresenceService, Infrastructure.Presence.InMemoryPresenceService>();
+        builder.Services.AddScoped<IMeetingNotifier, SignalRMeetingNotifier>();
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSignalR();
+        builder.Services.AddHostedService<Infrastructure.Background.FacilitatorElectionWorker>();
         builder.Services.AddDataProtection();
         builder.Services.AddSingleton<IInvitationTokenService, Infrastructure.Security.DataProtectionInvitationTokenService>();
         builder.Services.AddSingleton<StartupState>();
@@ -86,6 +93,8 @@ public sealed partial class Program
 
         app.MapMeetingEndpoints();
         app.MapTemplateEndpoints();
+        app.MapMemberEndpoints();
+        app.MapHub<RetroHub>("/hubs/retro");
         app.MapGet("/", () => Results.Ok(new { Name = "T-Retro API" }));
         app.MapGet("/health/live", () => Results.Ok(new HealthResponse("ok"))).AllowAnonymous();
         app.MapGet("/health/startup", (StartupState state) =>

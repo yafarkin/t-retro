@@ -59,7 +59,7 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await first.goto(oldInvite);
   await first.getByRole('button', { name: 'Вступить во встречу' }).click();
   await expect(first.getByRole('heading', { name: 'Ретро M1', exact: true })).toBeVisible();
-  await expect(first.getByText('Сотрудник А', { exact: true })).toBeVisible();
+  await expect(first.getByText('Сотрудник А', { exact: false })).toBeVisible();
 
   await second.reload();
   await second.getByRole('button', { name: 'Показать приглашение' }).click();
@@ -75,7 +75,7 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await third.goto(newInvite);
   await third.getByRole('button', { name: 'Вступить во встречу' }).click();
   await expect(third.getByRole('heading', { name: 'Ретро M1', exact: true })).toBeVisible();
-  await expect(third.getByText('Сотрудник В', { exact: true })).toBeVisible();
+  await expect(third.getByText('Сотрудник В', { exact: false })).toBeVisible();
 
   await Promise.all([firstContext.close(), secondContext.close(), thirdContext.close()]);
 });

@@ -10,7 +10,8 @@ public sealed record MeetingParticipant(
     Guid UserId,
     string Subject,
     string DisplayName,
-    MemberStatus Status);
+    MemberStatus Status,
+    bool IsOnline = false);
 
 public sealed record MeetingStateData(
     Meeting Meeting,

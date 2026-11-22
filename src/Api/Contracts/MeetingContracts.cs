@@ -62,7 +62,8 @@ public sealed record ParticipantResponse(
     string Id,
     string Subject,
     string DisplayName,
-    string Status);
+    string Status,
+    bool IsOnline);
 
 public sealed record MeetingStateResponse(
     DateTimeOffset ServerNowUtc,
