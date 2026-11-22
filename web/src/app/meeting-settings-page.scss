@@ -1,0 +1,56 @@
+.page {
+  width: min(100% - 2rem, 64rem);
+  margin: 0 auto;
+  padding: 2rem 0;
+}
+
+header,
+.inline,
+.invite {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+header {
+  justify-content: space-between;
+}
+
+section {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: 0.75rem;
+}
+
+.eyebrow,
+.hint {
+  color: var(--tui-text-secondary);
+}
+
+.error {
+  color: var(--tui-status-negative);
+}
+
+.notice {
+  color: var(--tui-status-positive);
+}
+
+.invite input,
+select {
+  min-height: 2.75rem;
+  padding: 0.5rem;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: 0.5rem;
+}
+
+.invite input {
+  flex: 1 1 24rem;
+}
+
+.columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}

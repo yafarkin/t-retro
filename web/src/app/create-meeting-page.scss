@@ -1,0 +1,9 @@
+.page {
+  width: min(100% - 2rem, 64rem);
+  margin: 0 auto;
+  padding: 2rem 0;
+}
+
+.error {
+  color: var(--tui-status-negative);
+}

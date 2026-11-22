@@ -5,6 +5,11 @@ namespace Infrastructure.Persistence.Sqlite;
 
 public sealed class SqliteConnectionFactory
 {
+    static SqliteConnectionFactory()
+    {
+        DefaultTypeMap.MatchNamesWithUnderscores = true;
+    }
+
     private readonly string connectionString;
 
     public SqliteConnectionFactory(string connectionString, string contentRootPath)

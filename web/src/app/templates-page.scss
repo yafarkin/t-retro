@@ -1,0 +1,47 @@
+.page {
+  width: min(100% - 2rem, 64rem);
+  margin: 0 auto;
+  padding: 2rem 0;
+}
+
+section,
+article {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: 0.75rem;
+}
+
+form,
+.catalog {
+  display: grid;
+  gap: 1rem;
+}
+
+article header,
+.actions,
+.columns {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+article header {
+  justify-content: space-between;
+}
+
+select {
+  min-height: 2.75rem;
+  padding: 0.5rem;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: 0.5rem;
+}
+
+.error {
+  color: var(--tui-status-negative);
+}
+
+.notice {
+  color: var(--tui-status-positive);
+}

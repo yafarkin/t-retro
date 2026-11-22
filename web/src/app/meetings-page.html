@@ -4,15 +4,51 @@
       <p class="eyebrow">T-Retro</p>
       <h1>Мои встречи</h1>
     </div>
-    <button tuiButton type="button" appearance="secondary" (click)="logout()">Выйти</button>
+    <div class="actions">
+      <a tuiButton routerLink="/templates">Шаблоны</a>
+      <a tuiButton routerLink="/meetings/new">Создать встречу</a>
+      <button tuiButton type="button" appearance="secondary" (click)="logout()">Выйти</button>
+    </div>
   </header>
 
   @if (auth.user(); as employee) {
     <p>Вы вошли как {{ employee.displayName }}.</p>
   }
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+  @if (loading()) {
+    <p>Загружаем встречи…</p>
+  }
 
-  <section class="empty">
-    <h2>Встреч пока нет</h2>
-    <p>Создание и список встреч появятся на этапе M1.</p>
+  <section>
+    <h2>Активные</h2>
+    @if (!loading() && active().length === 0) {
+      <p class="empty">Активных встреч нет. Создайте первую встречу.</p>
+    }
+    <div class="meetings">
+      @for (meeting of active(); track meeting.id) {
+        <a class="meeting" [routerLink]="['/meetings', meeting.id]">
+          <strong>{{ meeting.name }}</strong>
+          <span>{{ phaseName(meeting.phase) }}</span>
+          <time [dateTime]="meeting.createdAtUtc">{{ meeting.createdAtUtc | date: 'd MMMM y, HH:mm' }}</time>
+        </a>
+      }
+    </div>
   </section>
+
+  @if (closed().length > 0) {
+    <section>
+      <h2>Завершённые</h2>
+      <div class="meetings">
+        @for (meeting of closed(); track meeting.id) {
+          <a class="meeting" [routerLink]="['/meetings', meeting.id]">
+            <strong>{{ meeting.name }}</strong>
+            <span>{{ phaseName(meeting.phase) }}</span>
+            <time [dateTime]="meeting.createdAtUtc">{{ meeting.createdAtUtc | date: 'd MMMM y, HH:mm' }}</time>
+          </a>
+        }
+      </div>
+    </section>
+  }
 </main>

@@ -1,0 +1,64 @@
+<main class="page">
+  <a routerLink="/">← Мои встречи</a>
+  <h1>Шаблоны колонок</h1>
+
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+  @if (notice(); as message) {
+    <p class="notice" role="status">{{ message }}</p>
+  }
+
+  <section>
+    <h2>{{ selectedId() ? 'Изменение шаблона' : 'Новый шаблон' }}</h2>
+    <form #templateForm="ngForm" (ngSubmit)="templateForm.valid && save()">
+      <label for="template-name">Название</label>
+      <tui-textfield>
+        <input id="template-name" tuiTextfield name="name" [(ngModel)]="name" required maxlength="120" />
+      </tui-textfield>
+
+      <label for="visibility">Видимость</label>
+      <select id="visibility" name="visibility" [(ngModel)]="visibility">
+        <option value="personal">Личный</option>
+        <option value="shared">Общий</option>
+      </select>
+
+      <app-columns-editor [(columns)]="columns" />
+
+      <div class="actions">
+        <button tuiButton type="submit" [disabled]="busy()">{{ selectedId() ? 'Сохранить изменения' : 'Создать шаблон' }}</button>
+        @if (selectedId()) {
+          <button tuiButton type="button" appearance="secondary" (click)="reset()">Отменить изменение</button>
+        }
+      </div>
+    </form>
+  </section>
+
+  <section>
+    <h2>Доступные шаблоны</h2>
+    @if (templates().length === 0) {
+      <p>Шаблонов пока нет.</p>
+    }
+    <div class="catalog">
+      @for (template of templates(); track template.id) {
+        <article>
+          <header>
+            <h3>{{ template.name }}</h3>
+            <span>{{ template.visibility === 'shared' ? 'Общий' : 'Личный' }}</span>
+          </header>
+          <div class="columns">
+            @for (column of template.columns; track column.id) {
+              <span [style.color]="column.color">{{ column.name }}</span>
+            }
+          </div>
+          @if (template.ownerId === auth.user()?.id) {
+            <div class="actions">
+              <button tuiButton type="button" appearance="secondary" (click)="edit(template)">Изменить</button>
+              <button tuiButton type="button" appearance="secondary" (click)="delete(template)">Удалить</button>
+            </div>
+          }
+        </article>
+      }
+    </div>
+  </section>
+</main>

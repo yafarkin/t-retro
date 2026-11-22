@@ -48,7 +48,15 @@ public sealed partial class Program
         builder.Services.AddScoped<IEmployeeRepository, SqliteEmployeeRepository>();
         builder.Services.AddScoped<ISchemaVersionReader, SqliteSchemaVersionReader>();
         builder.Services.AddScoped<IDatabaseMigrator, SqliteDatabaseMigrator>();
+        builder.Services.AddScoped<IMeetingRepository, SqliteMeetingRepository>();
+        builder.Services.AddScoped<ITemplateRepository, SqliteTemplateRepository>();
         builder.Services.AddScoped<DevLoginService>();
+        builder.Services.AddScoped<MeetingAccessService>();
+        builder.Services.AddScoped<MeetingService>();
+        builder.Services.AddScoped<TemplateService>();
+        builder.Services.AddScoped<InvitationService>();
+        builder.Services.AddDataProtection();
+        builder.Services.AddSingleton<IInvitationTokenService, Infrastructure.Security.DataProtectionInvitationTokenService>();
         builder.Services.AddSingleton<StartupState>();
         builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options =>
@@ -76,6 +84,8 @@ public sealed partial class Program
             app.MapOpenApi();
         }
 
+        app.MapMeetingEndpoints();
+        app.MapTemplateEndpoints();
         app.MapGet("/", () => Results.Ok(new { Name = "T-Retro API" }));
         app.MapGet("/health/live", () => Results.Ok(new HealthResponse("ok"))).AllowAnonymous();
         app.MapGet("/health/startup", (StartupState state) =>

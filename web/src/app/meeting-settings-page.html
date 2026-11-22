@@ -1,0 +1,90 @@
+<main class="page">
+  <a routerLink="/">← Мои встречи</a>
+
+  @if (loading()) {
+    <p>Загружаем встречу…</p>
+  } @else if (state(); as meeting) {
+    <header>
+      <div>
+        <p class="eyebrow">{{ meeting.phase }}</p>
+        <h1>{{ meeting.name }}</h1>
+      </div>
+      <span>Версия {{ meeting.version }}</span>
+    </header>
+
+    @if (error(); as message) {
+      <p class="error" role="alert">{{ message }}</p>
+    }
+    @if (notice(); as message) {
+      <p class="notice" role="status">{{ message }}</p>
+    }
+
+    @if (meeting.canManage) {
+      <section>
+        <h2>Настройки подготовки</h2>
+        <app-meeting-form
+          [(name)]="name"
+          [(columns)]="columns"
+          [(anonymousCards)]="anonymousCards"
+          [(privateCollection)]="privateCollection"
+          [(anonymousVotes)]="anonymousVotes"
+          [(voteSettings)]="voteSettings"
+          [busy]="busy()"
+          submitLabel="Сохранить настройки"
+          (submitted)="save()" />
+      </section>
+
+      <section>
+        <h2>Шаблоны</h2>
+        <div class="inline">
+          <select aria-label="Шаблон колонок" name="template" [(ngModel)]="selectedTemplate">
+            <option value="">Выберите шаблон</option>
+            @for (template of templates(); track template.id) {
+              <option [value]="template.id">{{ template.name }}</option>
+            }
+          </select>
+          <button tuiButton type="button" appearance="secondary" (click)="applyTemplate()" [disabled]="!selectedTemplate()">Применить</button>
+          <button tuiButton type="button" appearance="secondary" (click)="saveAsTemplate()">Сохранить колонки как шаблон</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Приглашение</h2>
+        @if (invite(); as currentInvite) {
+          <div class="invite">
+            <input aria-label="Ссылка приглашения" readonly [value]="currentInvite.url" />
+            <button tuiButton type="button" (click)="copyInvite()">{{ copied() ? 'Скопировано' : 'Копировать' }}</button>
+            <button tuiButton type="button" appearance="secondary" (click)="rotateInvite()">Заменить ссылку</button>
+          </div>
+          <p class="hint">Версия приглашения {{ currentInvite.version }}.</p>
+        } @else {
+          <button tuiButton type="button" appearance="secondary" (click)="loadInvite()">Показать приглашение</button>
+        }
+      </section>
+    } @else {
+      <section>
+        <h2>Колонки</h2>
+        <div class="columns">
+          @for (column of meeting.columns; track column.id) {
+            <span [style.color]="column.color">{{ column.name }}</span>
+          }
+        </div>
+        <p>Настройки изменяет только фасилитатор.</p>
+      </section>
+    }
+
+    <section>
+      <h2>Участники</h2>
+      <ul>
+        @for (participant of meeting.participants; track participant.id) {
+          <li>
+            {{ participant.displayName }}
+            @if (participant.id === meeting.facilitatorId) { <span>(фасилитатор)</span> }
+          </li>
+        }
+      </ul>
+    </section>
+  } @else {
+    <p class="error" role="alert">{{ error() || 'Встреча недоступна.' }}</p>
+  }
+</main>

@@ -1,0 +1,40 @@
+<form class="form" #meetingForm="ngForm" (ngSubmit)="submit(meetingForm)">
+  <label for="meeting-name">Название встречи</label>
+  <tui-textfield>
+    <input id="meeting-name" tuiTextfield name="name" [(ngModel)]="name" required maxlength="120" />
+  </tui-textfield>
+
+  <fieldset>
+    <legend>Колонки</legend>
+    <app-columns-editor [(columns)]="columns" />
+  </fieldset>
+
+  <fieldset>
+    <legend>Конфиденциальность</legend>
+    <label class="check"><input type="checkbox" name="anonymousCards" [(ngModel)]="anonymousCards" /> Скрывать авторов карточек</label>
+    <label class="check"><input type="checkbox" name="privateCollection" [(ngModel)]="privateCollection" /> Скрывать чужие тексты во время сбора</label>
+    <label class="check"><input type="checkbox" name="anonymousVotes" [(ngModel)]="anonymousVotes" /> Скрывать индивидуальные голоса</label>
+    <p class="hint">Настройки конфиденциальности фиксируются после выхода из подготовки.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Бюджет голосов</legend>
+    <label for="vote-mode">Способ расчёта</label>
+    <select id="vote-mode" name="voteMode" [(ngModel)]="voteSettings().mode">
+      <option value="percent">Процент от числа карточек</option>
+      <option value="fixed">Фиксированный бюджет</option>
+    </select>
+
+    @if (voteSettings().mode === 'percent') {
+      <div class="numbers">
+        <label>Процент P <input type="number" name="votePercent" min="0" max="100" required [(ngModel)]="voteSettings().percent" /></label>
+        <label>Минимум M <input type="number" name="voteMinimum" min="1" required [(ngModel)]="voteSettings().minimum" /></label>
+      </div>
+      <p class="hint">B = max(M, ceil(N × P / 100)). Исходные значения: P = 5, M = 2.</p>
+    } @else {
+      <label>Голосов на человека <input type="number" name="voteFixed" min="1" required [(ngModel)]="voteSettings().fixed" /></label>
+    }
+  </fieldset>
+
+  <button tuiButton type="submit" [disabled]="busy()">{{ submitLabel() }}</button>
+</form>

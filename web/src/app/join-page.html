@@ -1,0 +1,18 @@
+<main class="page">
+  <section>
+    <h1>Вступление во встречу</h1>
+    @if (token) {
+      <p>Членство будет создано только после подтверждения.</p>
+      <button tuiButton type="button" (click)="join()" [disabled]="busy()">
+        {{ busy() ? 'Вступаем…' : 'Вступить во встречу' }}
+      </button>
+    } @else {
+      <p class="error" role="alert">Ссылка не содержит приглашение.</p>
+    }
+
+    @if (error(); as message) {
+      <p class="error" role="alert">{{ message }}</p>
+    }
+    <a routerLink="/">Вернуться к моим встречам</a>
+  </section>
+</main>

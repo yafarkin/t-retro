@@ -1,0 +1,36 @@
+.columns {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.column-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) 4rem auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.color {
+  width: 3.5rem;
+  height: 2.75rem;
+  padding: 0.25rem;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: 0.5rem;
+  background: transparent;
+}
+
+.actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+@media (max-width: 48rem) {
+  .column-row {
+    grid-template-columns: 1fr 4rem;
+  }
+
+  .actions {
+    grid-column: 1 / -1;
+  }
+}

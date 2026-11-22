@@ -1,0 +1,43 @@
+.form {
+  display: grid;
+  gap: 1rem;
+}
+
+fieldset {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: 0.75rem;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.numbers label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+input[type='number'],
+select {
+  min-height: 2.75rem;
+  padding: 0.5rem;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: 0.5rem;
+  background: var(--tui-background-elevation-1);
+}
+
+.hint {
+  margin: 0;
+  color: var(--tui-text-secondary);
+}

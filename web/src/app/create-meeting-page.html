@@ -1,0 +1,19 @@
+<main class="page">
+  <a routerLink="/">← Мои встречи</a>
+  <h1>Новая встреча</h1>
+
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+
+  <app-meeting-form
+    [(name)]="name"
+    [(columns)]="columns"
+    [(anonymousCards)]="anonymousCards"
+    [(privateCollection)]="privateCollection"
+    [(anonymousVotes)]="anonymousVotes"
+    [(voteSettings)]="voteSettings"
+    [busy]="busy()"
+    submitLabel="Создать встречу"
+    (submitted)="create()" />
+</main>

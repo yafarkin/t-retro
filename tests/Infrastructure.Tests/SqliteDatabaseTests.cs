@@ -1,3 +1,4 @@
+using Domain;
 using Infrastructure.Persistence.Sqlite;
 using Microsoft.Data.Sqlite;
 
@@ -26,6 +27,43 @@ public sealed class SqliteDatabaseTests : IDisposable
 
         Assert.Equal(first.Id, second.Id);
         Assert.Equal("Новое имя", second.DisplayName);
+    }
+
+    [Fact]
+    public async Task MeetingAndCreatorAreCreatedInOneTransaction()
+    {
+        var databasePath = Path.Combine(directory, "test.db");
+        var connections = new SqliteConnectionFactory($"Data Source={databasePath}", directory);
+        await new SqliteDatabaseMigrator(connections).MigrateAsync(CancellationToken.None);
+        var employee = await new SqliteEmployeeRepository(connections).GetOrCreateAsync("creator", "Создатель", CancellationToken.None);
+        var repository = new SqliteMeetingRepository(connections);
+        var meetingId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var meeting = new Meeting(
+            meetingId,
+            "Ретро",
+            MeetingPhase.Draft,
+            true,
+            true,
+            true,
+            VoteBudgetSettings.Default,
+            employee.Id,
+            1,
+            1,
+            1,
+            now,
+            now);
+
+        await repository.CreateAsync(
+            meeting,
+            [new MeetingColumn(Guid.NewGuid(), meetingId, "Начать", "#36A269", 0)],
+            new MeetingMember(meetingId, employee.Id, MemberStatus.Active, now, null),
+            CancellationToken.None);
+
+        var state = await repository.GetStateAsync(meetingId, CancellationToken.None);
+        Assert.Equal(employee.Id, state!.Meeting.FacilitatorId);
+        Assert.Single(state.Participants);
+        Assert.Single(state.Columns);
     }
 
     public void Dispose()
