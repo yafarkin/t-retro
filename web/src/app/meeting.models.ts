@@ -138,6 +138,13 @@ export interface GroupProposal {
   groups: SuggestedGroup[];
 }
 
+export interface MeetingTimer {
+  runId: string;
+  phase: MeetingPhase;
+  endsAtUtc: string;
+  serverNowUtc: string;
+}
+
 export interface MeetingState extends MeetingSettingsPayload {
   serverNowUtc: string;
   id: string;
@@ -153,6 +160,7 @@ export interface MeetingState extends MeetingSettingsPayload {
   topics: MeetingTopic[];
   voting?: MeetingVoting;
   discussion?: MeetingDiscussion;
+  timer?: MeetingTimer;
   integrations: { ai: boolean };
   readiness?: MeetingReadiness;
 }

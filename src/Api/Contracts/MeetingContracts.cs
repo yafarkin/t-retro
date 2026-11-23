@@ -111,6 +111,31 @@ public sealed record MeetingVotingResponse(
 
 public sealed record MyVotesResponse(int Version, int BallotVersion, int Remaining);
 
+public sealed record MeetingTimerResponse(
+    string RunId,
+    string Phase,
+    DateTimeOffset EndsAtUtc,
+    DateTimeOffset ServerNowUtc);
+
+public sealed class StartTimerRequest
+{
+    public int Seconds { get; set; }
+    public Guid OperationId { get; set; }
+}
+
+public sealed class AddTimerRequest
+{
+    public Guid RunId { get; set; }
+    public int Seconds { get; set; }
+    public Guid OperationId { get; set; }
+}
+
+public sealed class StopTimerRequest
+{
+    public Guid RunId { get; set; }
+    public Guid OperationId { get; set; }
+}
+
 public sealed record DiscussionTopicResponse(string TopicId, int Position, string Status);
 
 public sealed record TopicCommentResponse(string Id, string TopicId, string Text);
@@ -155,6 +180,7 @@ public sealed record MeetingStateResponse(
     IReadOnlyList<MeetingTopicResponse> Topics,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingVotingResponse? Voting,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingDiscussionResponse? Discussion,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingTimerResponse? Timer,
     MeetingIntegrationsResponse Integrations,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingReadinessResponse? Readiness);
 

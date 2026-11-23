@@ -1,3 +1,5 @@
+using Domain;
+
 namespace Application;
 
 public sealed record PresenceConnection(string ConnectionId, Guid MeetingId, Guid UserId);
@@ -22,4 +24,10 @@ public interface IMeetingNotifier
     Task PresenceChangedAsync(Guid meetingId, CancellationToken cancellationToken);
 
     Task AccessRevokedAsync(Guid meetingId, Guid userId, CancellationToken cancellationToken);
+
+    Task TimerExpiredAsync(
+        Guid meetingId,
+        Guid runId,
+        MeetingPhase phase,
+        CancellationToken cancellationToken);
 }

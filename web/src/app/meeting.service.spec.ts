@@ -89,4 +89,14 @@ describe('MeetingService', () => {
     expect(request.request.body.operationId).toMatch(/[0-9a-f-]{36}/);
     request.flush({ id: 'action-id', version: 8 });
   });
+
+  it('starts a timer with duration and operation id', () => {
+    service.startTimer('meeting-id', 60).subscribe();
+
+    const request = http.expectOne('/api/meetings/meeting-id/timer/start');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body.seconds).toBe(60);
+    expect(request.request.body.operationId).toMatch(/[0-9a-f-]{36}/);
+    request.flush({ runId: 'run-id', phase: 'Collect', endsAtUtc: '2026-11-23T12:01:00Z', serverNowUtc: '2026-11-23T12:00:00Z' });
+  });
 });

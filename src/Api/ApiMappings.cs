@@ -67,6 +67,13 @@ public static class ApiMappings
                     snapshot.Voting.Remaining,
                     snapshot.Voting.BallotVersion),
             snapshot.Discussion is null ? null : ToResponse(snapshot.Discussion),
+            snapshot.Timer is null
+                ? null
+                : new MeetingTimerResponse(
+                    snapshot.Timer.RunId.ToString(),
+                    snapshot.Timer.Phase.ToString(),
+                    snapshot.Timer.EndsAtUtc,
+                    snapshot.Timer.ServerNowUtc),
             new MeetingIntegrationsResponse(snapshot.Integrations.Ai),
             snapshot.Readiness is null
                 ? null

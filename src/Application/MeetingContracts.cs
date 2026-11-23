@@ -41,6 +41,7 @@ public sealed record MeetingSnapshot(
     MeetingVoting? Voting,
     MeetingDiscussion? Discussion,
     MeetingReadiness? Readiness,
+    MeetingTimer? Timer,
     MeetingIntegrations Integrations,
     Guid CurrentUserId)
 {

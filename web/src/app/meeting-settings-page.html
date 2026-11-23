@@ -50,6 +50,38 @@
         </section>
       }
 
+      @if (isTimerPhase(meeting.phase)) {
+        <section class="timer-section">
+          <h2>Таймер</h2>
+          @if (sync.expired(); as expired) {
+            <p class="error" role="alert"><span>Время вышло</span> <button tuiButton type="button" size="s" appearance="secondary" (click)="sync.dismissExpired()">Скрыть</button></p>
+          }
+          <div class="inline">
+            <button tuiButton type="button" size="s" appearance="secondary" (click)="sync.sound.enableAndTest()">Проверить звук</button>
+            @if (sync.sound.enabled()) { <span class="notice">Звук включён</span> }
+          </div>
+          @if (sync.sound.error()) {
+            <p class="error" role="alert">Браузер не разрешил звук. Визуальное оповещение продолжит работать.</p>
+          }
+          @if (meeting.timer) {
+            <p class="budget-numbers"><strong>Осталось: {{ formatTimer(sync.timerRemaining() ?? 0) }}</strong></p>
+          } @else {
+            <p class="hint">Таймер не запущен.</p>
+          }
+          @if (meeting.canManage) {
+            <div class="vote-settings">
+              <label>Секунды <input type="number" aria-label="Секунды таймера" name="timerSeconds" min="1" required [(ngModel)]="timerSeconds" /></label>
+              @if (meeting.timer) {
+                <button tuiButton type="button" size="s" (click)="addTimer()" [disabled]="commandsBlocked()">Добавить время</button>
+                <button tuiButton type="button" size="s" appearance="secondary" (click)="stopTimer()" [disabled]="commandsBlocked()">Остановить таймер</button>
+              } @else {
+                <button tuiButton type="button" size="s" (click)="startTimer()" [disabled]="timerSeconds() <= 0 || commandsBlocked()">Запустить таймер</button>
+              }
+            </div>
+          }
+        </section>
+      }
+
       @if (meeting.phase === 'Discuss' && meeting.discussion; as discussion) {
         <section class="discussion-queue">
           <h2>Рейтинг тем</h2>

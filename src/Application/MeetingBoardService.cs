@@ -6,6 +6,7 @@ public sealed class MeetingBoardService(
     IMeetingRepository meetings,
     MeetingAccessService access,
     IMeetingNotifier notifier,
+    IMeetingTimer timer,
     TimeProvider timeProvider)
 {
     public async Task<MeetingCommandResult> CreateCardAsync(
@@ -133,6 +134,11 @@ public sealed class MeetingBoardService(
             CommandFingerprint.Create(parsedPhase, expectedVersion),
             timeProvider.GetUtcNow(),
             cancellationToken);
+        if (result.Status == MeetingCommandStatus.Success && !result.IsReplay)
+        {
+            timer.Cancel(meetingId);
+        }
+
         return await CompleteAsync(meetingId, result, cancellationToken);
     }
 

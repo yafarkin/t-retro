@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { Observable } from 'rxjs';
 import { TuiButton } from '@taiga-ui/core';
 import { apiErrorMessage } from './api-error';
 import { MeetingForm } from './meeting-form';
@@ -65,6 +66,7 @@ export class MeetingSettingsPage {
   readonly editingEntryId = signal<string | null>(null);
   readonly editingEntryText = signal('');
   readonly editingActionAssignee = signal('');
+  readonly timerSeconds = signal(60);
   readonly otherParticipants = computed(() =>
     this.state()?.participants.filter((participant) =>
       participant.status === 'Active' && participant.id !== this.state()?.facilitatorId) ?? []);
@@ -470,6 +472,65 @@ export class MeetingSettingsPage {
   proposalCards(cardIds: string[]): MeetingCard[] {
     const ids = new Set(cardIds);
     return this.state()?.cards.filter((card) => ids.has(card.id)) ?? [];
+  }
+
+  isTimerPhase(phase: MeetingPhase): boolean {
+    return phase === 'Collect' || phase === 'Group' || phase === 'Vote' || phase === 'Discuss';
+  }
+
+  startTimer(): void {
+    const current = this.state();
+    if (!current || this.timerSeconds() <= 0 || this.commandsBlocked()) {
+      return;
+    }
+    this.executeTimerCommand(
+      this.meetings.startTimer(this.meetingId, this.timerSeconds()),
+      'Таймер запущен.',
+    );
+  }
+
+  addTimer(): void {
+    const current = this.state();
+    if (!current?.timer || this.timerSeconds() <= 0 || this.commandsBlocked()) {
+      return;
+    }
+    this.executeTimerCommand(
+      this.meetings.addTimer(this.meetingId, current.timer.runId, this.timerSeconds()),
+      'Время добавлено.',
+    );
+  }
+
+  stopTimer(): void {
+    const current = this.state();
+    if (!current?.timer || this.commandsBlocked()) {
+      return;
+    }
+    this.executeTimerCommand(
+      this.meetings.stopTimer(this.meetingId, current.timer.runId),
+      'Таймер остановлен.',
+    );
+  }
+
+  formatTimer(totalSeconds: number): string {
+    const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+    return `${minutes}:${seconds}`;
+  }
+
+  private executeTimerCommand(command: Observable<unknown>, success: string): void {
+    this.busy.set(true);
+    this.error.set(null);
+    this.notice.set(null);
+    command.subscribe({
+      next: () => {
+        this.notice.set(success);
+        void this.sync.refresh().finally(() => this.busy.set(false));
+      },
+      error: (error: HttpErrorResponse) => {
+        this.commandFailed(error);
+        void this.sync.refresh();
+      },
+    });
   }
 
   currentTopic(): MeetingTopic | undefined {

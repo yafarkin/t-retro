@@ -1,4 +1,5 @@
 using Application;
+using Domain;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Api;
@@ -27,4 +28,12 @@ public sealed class SignalRMeetingNotifier(
             .SendAsync("AccessRevoked", meetingId, cancellationToken);
         await PresenceChangedAsync(meetingId, cancellationToken);
     }
+
+    public Task TimerExpiredAsync(
+        Guid meetingId,
+        Guid runId,
+        MeetingPhase phase,
+        CancellationToken cancellationToken) =>
+        hub.Clients.Group(RetroHub.MeetingGroup(meetingId))
+            .SendAsync("TimerExpired", meetingId, runId, phase.ToString(), cancellationToken);
 }

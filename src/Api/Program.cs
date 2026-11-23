@@ -64,14 +64,17 @@ public sealed partial class Program
         builder.Services.AddScoped<InvitationService>();
         builder.Services.AddScoped<MemberService>();
         builder.Services.AddScoped<FacilitatorElectionService>();
+        builder.Services.AddScoped<TimerService>();
         builder.Services.AddSingleton<IGroupSuggestionProvider>(
             new Infrastructure.Integrations.StubGroupSuggestionProvider(
                 builder.Configuration.GetValue<bool>("Integrations:Ai:Enabled")));
         builder.Services.AddSingleton<IPresenceService, Infrastructure.Presence.InMemoryPresenceService>();
+        builder.Services.AddSingleton<IMeetingTimer, Infrastructure.Timers.InMemoryMeetingTimer>();
         builder.Services.AddScoped<IMeetingNotifier, SignalRMeetingNotifier>();
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSignalR();
         builder.Services.AddHostedService<Infrastructure.Background.FacilitatorElectionWorker>();
+        builder.Services.AddHostedService<Infrastructure.Background.TimerWorker>();
         builder.Services.AddDataProtection();
         builder.Services.AddSingleton<IInvitationTokenService, Infrastructure.Security.DataProtectionInvitationTokenService>();
         builder.Services.AddSingleton<StartupState>();
@@ -106,6 +109,7 @@ public sealed partial class Program
         app.MapGroupingEndpoints();
         app.MapVotingEndpoints();
         app.MapDiscussionEndpoints();
+        app.MapTimerEndpoints();
         app.MapTemplateEndpoints();
         app.MapMemberEndpoints();
         app.MapHub<RetroHub>("/hubs/retro");

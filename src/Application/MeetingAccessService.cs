@@ -5,7 +5,9 @@ namespace Application;
 public sealed class MeetingAccessService(
     IMeetingRepository meetings,
     IPresenceService presence,
-    IGroupSuggestionProvider groupSuggestions)
+    IGroupSuggestionProvider groupSuggestions,
+    IMeetingTimer timer,
+    TimeProvider timeProvider)
 {
     public async Task<MeetingSnapshot> GetAsync(
         Guid userId,
@@ -63,6 +65,14 @@ public sealed class MeetingAccessService(
                 state.Decisions,
                 state.Actions)
             : null;
+        var currentTimer = state.Meeting.Phase is MeetingPhase.Collect or MeetingPhase.Group or MeetingPhase.Vote or MeetingPhase.Discuss
+            ? timer.Get(meetingId, timeProvider.GetUtcNow())
+            : null;
+        if (currentTimer?.Phase != state.Meeting.Phase)
+        {
+            currentTimer = null;
+        }
+
         return new MeetingSnapshot(
             state.Meeting,
             state.Columns,
@@ -73,6 +83,7 @@ public sealed class MeetingAccessService(
             voting,
             discussion,
             readiness,
+            currentTimer,
             new MeetingIntegrations(groupSuggestions.IsAvailable),
             userId);
     }

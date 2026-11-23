@@ -177,6 +177,28 @@ export class MeetingService {
     return this.deleteDiscussionEntry(meetingId, 'actions', actionId, expectedVersion);
   }
 
+  startTimer(meetingId: string, seconds: number): Observable<MeetingState['timer']> {
+    return this.http.post<NonNullable<MeetingState['timer']>>(`/api/meetings/${meetingId}/timer/start`, {
+      seconds,
+      operationId: crypto.randomUUID(),
+    });
+  }
+
+  addTimer(meetingId: string, runId: string, seconds: number): Observable<MeetingState['timer']> {
+    return this.http.post<NonNullable<MeetingState['timer']>>(`/api/meetings/${meetingId}/timer/add`, {
+      runId,
+      seconds,
+      operationId: crypto.randomUUID(),
+    });
+  }
+
+  stopTimer(meetingId: string, runId: string): Observable<void> {
+    return this.http.post<void>(`/api/meetings/${meetingId}/timer/stop`, {
+      runId,
+      operationId: crypto.randomUUID(),
+    });
+  }
+
   private createDiscussionEntry(
     meetingId: string,
     topicId: string,
