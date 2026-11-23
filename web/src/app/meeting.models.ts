@@ -52,12 +52,31 @@ export interface MeetingCard {
   isMine: boolean;
   isHidden: boolean;
   version: number;
+  groupId: string | null;
+}
+
+export interface MeetingGroup {
+  id: string;
+  columnId: string;
+  name: string;
 }
 
 export interface MeetingReadiness {
   readyCount: number;
   totalCount: number;
   myReady: boolean;
+}
+
+export interface SuggestedGroup {
+  name: string;
+  columnId: string;
+  cardIds: string[];
+}
+
+export interface GroupProposal {
+  id: string;
+  boardVersion: number;
+  groups: SuggestedGroup[];
 }
 
 export interface MeetingState extends MeetingSettingsPayload {
@@ -71,6 +90,8 @@ export interface MeetingState extends MeetingSettingsPayload {
   columns: Column[];
   participants: Participant[];
   cards: MeetingCard[];
+  groups: MeetingGroup[];
+  integrations: { ai: boolean };
   readiness?: MeetingReadiness;
 }
 

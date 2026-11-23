@@ -41,6 +41,13 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
                     conflictException.Code,
                     conflictException.Message);
                 return true;
+            case IntegrationUnavailableException integrationException:
+                await ApiError.WriteAsync(
+                    httpContext,
+                    StatusCodes.Status503ServiceUnavailable,
+                    "IntegrationUnavailable",
+                    integrationException.Message);
+                return true;
             case BadHttpRequestException:
                 await ApiError.WriteAsync(
                     httpContext,

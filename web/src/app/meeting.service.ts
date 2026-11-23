@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  GroupProposal,
   Invite,
   MeetingSettingsPayload,
   MeetingState,
@@ -80,6 +81,43 @@ export class MeetingService {
     return this.http.post<{ version: number }>(`/api/meetings/${meetingId}/advance`, {
       fromPhase,
       expectedVersion,
+      operationId: crypto.randomUUID(),
+    });
+  }
+
+  move(
+    meetingId: string,
+    sourceKind: string,
+    sourceId: string,
+    targetKind: string,
+    targetId: string,
+    expectedBoardVersion: number,
+  ): Observable<{ version: number; boardVersion: number }> {
+    return this.http.post<{ version: number; boardVersion: number }>(`/api/meetings/${meetingId}/moves`, {
+      sourceKind,
+      sourceId,
+      targetKind,
+      targetId,
+      expectedBoardVersion,
+      operationId: crypto.randomUUID(),
+    });
+  }
+
+  renameGroup(meetingId: string, groupId: string, name: string, expectedBoardVersion: number): Observable<{ version: number; boardVersion: number }> {
+    return this.http.put<{ version: number; boardVersion: number }>(`/api/meetings/${meetingId}/groups/${groupId}`, {
+      name,
+      expectedBoardVersion,
+    });
+  }
+
+  previewGroups(meetingId: string): Observable<GroupProposal> {
+    return this.http.post<GroupProposal>(`/api/meetings/${meetingId}/ai/preview`, {});
+  }
+
+  applyGroups(meetingId: string, proposalId: string, expectedBoardVersion: number): Observable<{ version: number; boardVersion: number }> {
+    return this.http.post<{ version: number; boardVersion: number }>(`/api/meetings/${meetingId}/ai/apply`, {
+      proposalId,
+      expectedBoardVersion,
       operationId: crypto.randomUUID(),
     });
   }

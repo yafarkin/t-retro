@@ -78,7 +78,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         var cards = (await connection.QueryAsync<CardRow>(
             """
             SELECT c.id AS Id, c.meeting_id AS MeetingId, c.column_id AS ColumnId,
-                   c.text AS Text, c.version AS Version,
+                   c.text AS Text, c.version AS Version, c.group_id AS GroupId,
                    c.created_at_utc AS CreatedAtUtc, c.updated_at_utc AS UpdatedAtUtc,
                    a.user_id AS AuthorId, u.display_name AS AuthorDisplayName
             FROM cards c
@@ -96,7 +96,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                     row.Text,
                     row.Version,
                     SqliteMapping.Time(row.CreatedAtUtc),
-                    SqliteMapping.Time(row.UpdatedAtUtc)),
+                    SqliteMapping.Time(row.UpdatedAtUtc),
+                    row.GroupId is null ? null : Guid.Parse(row.GroupId)),
                 Guid.Parse(row.AuthorId),
                 row.AuthorDisplayName))
             .ToArray();
@@ -105,7 +106,16 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             new { MeetingId = meetingId.ToString(), Phase = meetingRow.Phase }))
             .Select(Guid.Parse)
             .ToHashSet();
-        return new MeetingStateData(MapMeeting(meetingRow), columns, participants, cards, readyUserIds);
+        var groups = (await connection.QueryAsync<MeetingGroupRow>(
+            "SELECT id AS Id, meeting_id AS MeetingId, column_id AS ColumnId, name AS Name FROM groups WHERE meeting_id = @MeetingId ORDER BY name, id;",
+            new { MeetingId = meetingId.ToString() }))
+            .Select(row => new MeetingGroup(
+                Guid.Parse(row.Id),
+                Guid.Parse(row.MeetingId),
+                Guid.Parse(row.ColumnId),
+                row.Name))
+            .ToArray();
+        return new MeetingStateData(MapMeeting(meetingRow), columns, participants, cards, readyUserIds, groups);
     }
 
     public async Task<MeetingMember?> FindMemberAsync(
@@ -1286,10 +1296,19 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         public required string ColumnId { get; init; }
         public required string Text { get; init; }
         public int Version { get; init; }
+        public string? GroupId { get; init; }
         public required string CreatedAtUtc { get; init; }
         public required string UpdatedAtUtc { get; init; }
         public required string AuthorId { get; init; }
         public required string AuthorDisplayName { get; init; }
+    }
+
+    private sealed class MeetingGroupRow
+    {
+        public required string Id { get; init; }
+        public required string MeetingId { get; init; }
+        public required string ColumnId { get; init; }
+        public required string Name { get; init; }
     }
 
     private sealed class CommandStateRow

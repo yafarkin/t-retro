@@ -4,7 +4,8 @@ namespace Application;
 
 public sealed class MeetingAccessService(
     IMeetingRepository meetings,
-    IPresenceService presence)
+    IPresenceService presence,
+    IGroupSuggestionProvider groupSuggestions)
 {
     public async Task<MeetingSnapshot> GetAsync(
         Guid userId,
@@ -47,6 +48,14 @@ public sealed class MeetingAccessService(
                 activeParticipantIds.Count,
                 state.ReadyUserIds.Contains(userId))
             : null;
-        return new MeetingSnapshot(state.Meeting, state.Columns, participants, cards, readiness, userId);
+        return new MeetingSnapshot(
+            state.Meeting,
+            state.Columns,
+            participants,
+            cards,
+            state.Groups,
+            readiness,
+            new MeetingIntegrations(groupSuggestions.IsAvailable),
+            userId);
     }
 }

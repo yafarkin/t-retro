@@ -42,7 +42,13 @@ public static class ApiMappings
                 card.AuthorDisplayName,
                 card.IsMine,
                 card.IsHidden,
-                card.Version)).ToArray(),
+                card.Version,
+                card.GroupId?.ToString())).ToArray(),
+            snapshot.Groups.Select(group => new MeetingGroupResponse(
+                group.Id.ToString(),
+                group.ColumnId.ToString(),
+                group.Name)).ToArray(),
+            new MeetingIntegrationsResponse(snapshot.Integrations.Ai),
             snapshot.Readiness is null
                 ? null
                 : new MeetingReadinessResponse(

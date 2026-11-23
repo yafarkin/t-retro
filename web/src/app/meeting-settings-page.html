@@ -92,13 +92,120 @@
         }
       } @else {
         <section class="board-section">
-          <h2>Доска</h2>
+          <div class="board-heading">
+            <h2>Доска</h2>
+            @if (meeting.phase === 'Group' && meeting.canManage && meeting.integrations.ai) {
+              <button tuiButton type="button" appearance="secondary" (click)="previewGroups()" [disabled]="commandsBlocked()">Предложить группировку</button>
+            }
+          </div>
+          @if (meeting.phase === 'Group' && meeting.canManage && !meeting.integrations.ai) {
+            <p class="hint">Внутренний ИИ отключён. Ручная группировка доступна.</p>
+          }
+          @if (proposal(); as currentProposal) {
+            <section class="proposal">
+              <h3>Предпросмотр тестовой заглушки</h3>
+              <p class="hint">Внешний сервис не вызывается. Проверьте группы перед применением.</p>
+              @for (group of currentProposal.groups; track $index) {
+                <article>
+                  <h4>{{ group.name }}, {{ columnName(group.columnId) }}</h4>
+                  <ul>
+                    @for (card of proposalCards(group.cardIds); track card.id) {
+                      <li>{{ card.text }}</li>
+                    }
+                  </ul>
+                </article>
+              } @empty {
+                <p>Заглушка не нашла свободных пар карточек. Пустое предложение можно применить без изменений.</p>
+              }
+              <div class="inline">
+                <button tuiButton type="button" (click)="applyProposal()" [disabled]="commandsBlocked()">Применить предложение</button>
+                <button tuiButton type="button" appearance="secondary" (click)="cancelProposal()" [disabled]="commandsBlocked()">Отмена</button>
+              </div>
+            </section>
+          }
           <div class="board">
             @for (column of meeting.columns; track column.id) {
-              <section class="board-column" [attr.aria-label]="column.name">
+              <section
+                class="board-column"
+                [attr.aria-label]="column.name"
+                (dragover)="meeting.phase === 'Group' ? allowDrop($event) : null"
+                (drop)="meeting.phase === 'Group' ? drop($event, 'column', column.id) : null">
                 <h3 [style.color]="column.color">{{ column.name }}</h3>
+                @for (group of groupsForColumn(column.id); track group.id) {
+                  <article
+                    class="card-group"
+                    [draggable]="meeting.phase === 'Group' && !commandsBlocked()"
+                    (dragstart)="startDrag($event, 'group', group.id)"
+                    (dragover)="allowDrop($event)"
+                    (drop)="drop($event, 'group', group.id)">
+                    @if (meeting.phase === 'Group') {
+                      <label>
+                        <span class="visually-hidden">Название группы</span>
+                        <input
+                          aria-label="Название группы"
+                          maxlength="120"
+                          [ngModel]="groupNames()[group.id] ?? group.name"
+                          (ngModelChange)="setGroupName(group.id, $event)"
+                          [name]="'group-name-' + group.id" />
+                      </label>
+                      <button tuiButton type="button" size="s" appearance="secondary" (click)="renameGroup(group)" [disabled]="commandsBlocked()">Переименовать группу</button>
+                    } @else {
+                      <h4>{{ group.name }}</h4>
+                    }
+                    @for (card of cardsForGroup(group.id); track card.id) {
+                      <article
+                        class="card"
+                        [draggable]="meeting.phase === 'Group' && !commandsBlocked()"
+                        (dragstart)="startDrag($event, 'card', card.id)"
+                        (dragover)="allowDrop($event)"
+                        (drop)="drop($event, 'card', card.id)">
+                        @if (meeting.phase === 'Group') { <span class="drag-handle" draggable="true" (dragstart)="startDrag($event, 'card', card.id)">Перетащить</span> }<p class="card-text">{{ card.text }}</p>
+                        <footer>
+                          @if (card.isMine) { <span class="own-card">Моя карточка</span> }
+                          @if (card.authorDisplayName; as author) { <span>{{ author }}</span> }
+                        </footer>
+                        @if (meeting.phase === 'Group') {
+                          <div class="move-controls">
+                            <select
+                              aria-label="Назначение переноса"
+                              [ngModel]="selectedMoveTarget('card', card.id)"
+                              (ngModelChange)="setMoveTarget('card', card.id, $event)"
+                              [name]="'move-card-' + card.id">
+                              <option value="">Выберите назначение</option>
+                              @for (target of moveOptions('card', card.id); track target.value) {
+                                <option [value]="target.value">{{ target.label }}</option>
+                              }
+                            </select>
+                            <button tuiButton type="button" size="s" appearance="secondary" (click)="move('card', card.id)" [disabled]="!selectedMoveTarget('card', card.id) || commandsBlocked()">Переместить</button>
+                          </div>
+                        }
+                      </article>
+                    }
+                    @if (meeting.phase === 'Group') {
+                      <div class="move-controls">
+                        <select
+                          aria-label="Назначение переноса группы"
+                          [ngModel]="selectedMoveTarget('group', group.id)"
+                          (ngModelChange)="setMoveTarget('group', group.id, $event)"
+                          [name]="'move-group-' + group.id">
+                          <option value="">Колонка для группы</option>
+                          @for (target of moveOptions('group', group.id); track target.value) {
+                            <option [value]="target.value">{{ target.label }}</option>
+                          }
+                        </select>
+                        <button tuiButton type="button" size="s" appearance="secondary" (click)="move('group', group.id)" [disabled]="!selectedMoveTarget('group', group.id) || commandsBlocked()">Переместить группу</button>
+                      </div>
+                    }
+                  </article>
+                }
                 @for (card of cardsForColumn(column.id); track card.id) {
-                  <article class="card" [class.hidden-card]="card.isHidden">
+                  <article
+                    class="card"
+                    [class.hidden-card]="card.isHidden"
+                    [draggable]="meeting.phase === 'Group' && !commandsBlocked()"
+                    (dragstart)="startDrag($event, 'card', card.id)"
+                    (dragover)="meeting.phase === 'Group' ? allowDrop($event) : null"
+                    (drop)="meeting.phase === 'Group' ? drop($event, 'card', card.id) : null">
                     @if (card.isHidden) {
                       <p>Карточка скрыта до группировки</p>
                     } @else if (editingCardId() === card.id && meeting.phase === 'Collect') {
@@ -111,7 +218,7 @@
                         <button tuiButton type="button" size="s" appearance="secondary" (click)="cancelEdit()" [disabled]="commandsBlocked()">Отмена</button>
                       </div>
                     } @else {
-                      <p class="card-text">{{ card.text }}</p>
+                      @if (meeting.phase === 'Group') { <span class="drag-handle" draggable="true" (dragstart)="startDrag($event, 'card', card.id)">Перетащить</span> }<p class="card-text">{{ card.text }}</p>
                     }
                     @if (!card.isHidden && editingCardId() !== card.id) {
                       <footer>
@@ -125,8 +232,24 @@
                         <button tuiButton type="button" size="s" appearance="secondary" (click)="deleteCard(card)" [disabled]="commandsBlocked()">Удалить карточку</button>
                       </div>
                     }
+                    @if (meeting.phase === 'Group') {
+                      <div class="move-controls">
+                        <select
+                          aria-label="Назначение переноса"
+                          [ngModel]="selectedMoveTarget('card', card.id)"
+                          (ngModelChange)="setMoveTarget('card', card.id, $event)"
+                          [name]="'move-card-' + card.id">
+                          <option value="">Выберите назначение</option>
+                          @for (target of moveOptions('card', card.id); track target.value) {
+                            <option [value]="target.value">{{ target.label }}</option>
+                          }
+                        </select>
+                        <button tuiButton type="button" size="s" appearance="secondary" (click)="move('card', card.id)" [disabled]="!selectedMoveTarget('card', card.id) || commandsBlocked()">Переместить</button>
+                      </div>
+                    }
                   </article>
-                } @empty {
+                }
+                @if (cardsForColumn(column.id).length === 0 && groupsForColumn(column.id).length === 0) {
                   <p class="hint">В этой колонке пока нет карточек.</p>
                 }
                 @if (meeting.phase === 'Collect') {

@@ -18,14 +18,19 @@ public sealed record MeetingStateData(
     IReadOnlyList<MeetingColumn> Columns,
     IReadOnlyList<MeetingParticipant> Participants,
     IReadOnlyList<CardData> Cards,
-    IReadOnlySet<Guid> ReadyUserIds);
+    IReadOnlySet<Guid> ReadyUserIds,
+    IReadOnlyList<MeetingGroup> Groups);
+
+public sealed record MeetingIntegrations(bool Ai);
 
 public sealed record MeetingSnapshot(
     Meeting Meeting,
     IReadOnlyList<MeetingColumn> Columns,
     IReadOnlyList<MeetingParticipant> Participants,
     IReadOnlyList<MeetingCard> Cards,
+    IReadOnlyList<MeetingGroup> Groups,
     MeetingReadiness? Readiness,
+    MeetingIntegrations Integrations,
     Guid CurrentUserId)
 {
     public bool CanManage => Meeting.FacilitatorId == CurrentUserId;

@@ -8,7 +8,9 @@ import { MeetingForm } from './meeting-form';
 import {
   defaultColumns,
   defaultVoteSettings,
+  GroupProposal,
   MeetingCard,
+  MeetingGroup,
   MeetingPhase,
   MeetingSettingsPayload,
   MeetingState,
@@ -47,6 +49,9 @@ export class MeetingSettingsPage {
   readonly newCardTexts = signal<Record<string, string>>({});
   readonly editingCardId = signal<string | null>(null);
   readonly editingText = signal('');
+  readonly proposal = signal<GroupProposal | null>(null);
+  readonly moveTargets = signal<Record<string, string>>({});
+  readonly groupNames = signal<Record<string, string>>({});
   readonly otherParticipants = computed(() =>
     this.state()?.participants.filter((participant) =>
       participant.status === 'Active' && participant.id !== this.state()?.facilitatorId) ?? []);
@@ -316,7 +321,146 @@ export class MeetingSettingsPage {
   }
 
   cardsForColumn(columnId: string): MeetingCard[] {
-    return this.state()?.cards.filter((card) => card.columnId === columnId) ?? [];
+    return this.state()?.cards.filter((card) => card.columnId === columnId && card.groupId === null) ?? [];
+  }
+
+  groupsForColumn(columnId: string): MeetingGroup[] {
+    return this.state()?.groups.filter((group) => group.columnId === columnId) ?? [];
+  }
+
+  cardsForGroup(groupId: string): MeetingCard[] {
+    return this.state()?.cards.filter((card) => card.groupId === groupId) ?? [];
+  }
+
+  moveOptions(sourceKind: string, sourceId: string): { value: string; label: string }[] {
+    const meeting = this.state();
+    if (!meeting) {
+      return [];
+    }
+    const columns = meeting.columns
+      .map((column) => ({ value: `column:${column.id}`, label: `Колонка: ${column.name}` }));
+    if (sourceKind === 'group') {
+      return columns;
+    }
+    const cards = meeting.cards
+      .filter((card) => card.id !== sourceId)
+      .map((card) => ({
+        value: `card:${card.id}`,
+        label: `Карточка: ${(card.text ?? '').slice(0, 60)}`,
+      }));
+    const groups = meeting.groups
+      .map((group) => ({ value: `group:${group.id}`, label: `Группа: ${group.name}` }));
+    return [...columns, ...cards, ...groups];
+  }
+
+  selectedMoveTarget(sourceKind: string, sourceId: string): string {
+    return this.moveTargets()[`${sourceKind}:${sourceId}`] ?? '';
+  }
+
+  setMoveTarget(sourceKind: string, sourceId: string, target: string): void {
+    this.moveTargets.update((targets) => ({ ...targets, [`${sourceKind}:${sourceId}`]: target }));
+  }
+
+  move(sourceKind: string, sourceId: string): void {
+    const target = this.selectedMoveTarget(sourceKind, sourceId);
+    if (!target) {
+      return;
+    }
+    const separator = target.indexOf(':');
+    this.executeMove(sourceKind, sourceId, target.slice(0, separator), target.slice(separator + 1));
+  }
+
+  startDrag(event: DragEvent, sourceKind: string, sourceId: string): void {
+    event.stopPropagation();
+    if (this.commandsBlocked()) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer?.setData('text/plain', `${sourceKind}:${sourceId}`);
+  }
+
+  allowDrop(event: DragEvent): void {
+    event.preventDefault();
+  }
+
+  drop(event: DragEvent, targetKind: string, targetId: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const source = event.dataTransfer?.getData('text/plain') ?? '';
+    const separator = source.indexOf(':');
+    if (separator < 0) {
+      return;
+    }
+    this.executeMove(source.slice(0, separator), source.slice(separator + 1), targetKind, targetId);
+  }
+
+  renameGroup(group: MeetingGroup): void {
+    const current = this.state();
+    const name = this.groupNames()[group.id] ?? group.name;
+    if (!current || this.commandsBlocked() || !name.trim()) {
+      return;
+    }
+    this.busy.set(true);
+    this.error.set(null);
+    this.meetings.renameGroup(this.meetingId, group.id, name, current.boardVersion).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.notice.set('Название группы изменено.');
+        void this.sync.refresh();
+      },
+      error: (error: HttpErrorResponse) => this.commandFailed(error),
+    });
+  }
+
+  setGroupName(groupId: string, name: string): void {
+    this.groupNames.update((names) => ({ ...names, [groupId]: name }));
+  }
+
+  previewGroups(): void {
+    if (this.commandsBlocked()) {
+      return;
+    }
+    this.busy.set(true);
+    this.error.set(null);
+    this.meetings.previewGroups(this.meetingId).subscribe({
+      next: (proposal) => {
+        this.proposal.set(proposal);
+        this.busy.set(false);
+      },
+      error: (error: HttpErrorResponse) => this.commandFailed(error),
+    });
+  }
+
+  applyProposal(): void {
+    const current = this.state();
+    const proposal = this.proposal();
+    if (!current || !proposal || this.commandsBlocked()) {
+      return;
+    }
+    this.busy.set(true);
+    this.error.set(null);
+    this.meetings.applyGroups(this.meetingId, proposal.id, current.boardVersion).subscribe({
+      next: () => {
+        this.proposal.set(null);
+        this.busy.set(false);
+        this.notice.set('Предложение применено.');
+        void this.sync.refresh();
+      },
+      error: (error: HttpErrorResponse) => this.commandFailed(error),
+    });
+  }
+
+  cancelProposal(): void {
+    this.proposal.set(null);
+  }
+
+  proposalCards(cardIds: string[]): MeetingCard[] {
+    const ids = new Set(cardIds);
+    return this.state()?.cards.filter((card) => ids.has(card.id)) ?? [];
+  }
+
+  columnName(columnId: string): string {
+    return this.state()?.columns.find((column) => column.id === columnId)?.name ?? '';
   }
 
   readinessText(): string {
@@ -372,6 +516,24 @@ export class MeetingSettingsPage {
     }
   }
 
+  private executeMove(sourceKind: string, sourceId: string, targetKind: string, targetId: string): void {
+    const current = this.state();
+    if (!current || this.commandsBlocked()) {
+      return;
+    }
+    this.busy.set(true);
+    this.error.set(null);
+    this.meetings.move(this.meetingId, sourceKind, sourceId, targetKind, targetId, current.boardVersion).subscribe({
+      next: () => {
+        this.setMoveTarget(sourceKind, sourceId, '');
+        this.busy.set(false);
+        this.notice.set('Перенос выполнен.');
+        void this.sync.refresh();
+      },
+      error: (error: HttpErrorResponse) => this.commandFailed(error),
+    });
+  }
+
   private commandFailed(error: HttpErrorResponse): void {
     this.error.set(apiErrorMessage(error));
     this.busy.set(false);
@@ -384,6 +546,7 @@ export class MeetingSettingsPage {
     this.privateCollection.set(state.privateCollection);
     this.anonymousVotes.set(state.anonymousVotes);
     this.voteSettings.set({ ...state.voteSettings });
+    this.groupNames.set(Object.fromEntries(state.groups.map((group) => [group.id, group.name])));
   }
 
   private payload(): MeetingSettingsPayload {

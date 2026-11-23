@@ -19,6 +19,7 @@ public static class MeetingCardVisibility
             showAuthor ? data.AuthorDisplayName : null,
             isMine,
             !showText,
-            data.Card.Version);
+            data.Card.Version,
+            data.Card.GroupId);
     }
 }

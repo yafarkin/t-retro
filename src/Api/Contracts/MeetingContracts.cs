@@ -75,7 +75,12 @@ public sealed record MeetingCardResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? AuthorDisplayName,
     bool IsMine,
     bool IsHidden,
-    int Version);
+    int Version,
+    string? GroupId);
+
+public sealed record MeetingGroupResponse(string Id, string ColumnId, string Name);
+
+public sealed record MeetingIntegrationsResponse(bool Ai);
 
 public sealed record MeetingReadinessResponse(int ReadyCount, int TotalCount, bool MyReady);
 
@@ -95,7 +100,41 @@ public sealed record MeetingStateResponse(
     IReadOnlyList<ColumnResponse> Columns,
     IReadOnlyList<ParticipantResponse> Participants,
     IReadOnlyList<MeetingCardResponse> Cards,
+    IReadOnlyList<MeetingGroupResponse> Groups,
+    MeetingIntegrationsResponse Integrations,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingReadinessResponse? Readiness);
+
+public sealed class MoveCardRequest
+{
+    public string SourceKind { get; set; } = string.Empty;
+    public Guid SourceId { get; set; }
+    public string TargetKind { get; set; } = string.Empty;
+    public Guid TargetId { get; set; }
+    public int ExpectedBoardVersion { get; set; }
+    public Guid OperationId { get; set; }
+}
+
+public sealed class RenameGroupRequest
+{
+    public string? Name { get; set; }
+    public int ExpectedBoardVersion { get; set; }
+}
+
+public sealed class ApplyGroupProposalRequest
+{
+    public Guid ProposalId { get; set; }
+    public int ExpectedBoardVersion { get; set; }
+    public Guid OperationId { get; set; }
+}
+
+public sealed record BoardVersionResponse(int Version, int BoardVersion);
+
+public sealed record SuggestedGroupResponse(string Name, string ColumnId, IReadOnlyList<string> CardIds);
+
+public sealed record GroupProposalResponse(
+    string Id,
+    int BoardVersion,
+    IReadOnlyList<SuggestedGroupResponse> Groups);
 
 public sealed class CreateCardRequest
 {

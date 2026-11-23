@@ -77,7 +77,7 @@ test('M3 private cards, readiness, late join, exclusion and phase advance synchr
   await expect(firstColumn.getByText('Карточка скрыта до группировки', { exact: true })).toHaveCount(0);
   await expect(second.getByLabel('Новая карточка')).toHaveCount(0);
   await expect(second.getByLabel('Я готов')).toHaveCount(0);
-  const revealedCard = firstColumn.locator('.card').filter({ hasText: 'Обновлённый секрет' });
+  const revealedCard = firstColumn.locator('.card').filter({ has: first.getByText('Обновлённый секрет', { exact: true }) });
   await expect(revealedCard).not.toContainText('Второй M3');
 
   await Promise.all([firstContext.close(), secondContext.close(), thirdContext.close()]);

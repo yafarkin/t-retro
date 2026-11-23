@@ -7,7 +7,8 @@ public sealed record Card(
     string Text,
     int Version,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset UpdatedAtUtc)
+    DateTimeOffset UpdatedAtUtc,
+    Guid? GroupId = null)
 {
     public const int MaxTextLength = 4000;
 

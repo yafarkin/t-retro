@@ -12,7 +12,8 @@ public sealed record MeetingCard(
     string? AuthorDisplayName,
     bool IsMine,
     bool IsHidden,
-    int Version);
+    int Version,
+    Guid? GroupId = null);
 
 public sealed record MeetingReadiness(int ReadyCount, int TotalCount, bool MyReady);
 
@@ -30,4 +31,5 @@ public sealed record MeetingCommandResult(
     MeetingCommandStatus Status,
     int Version = 0,
     Guid? EntityId = null,
-    bool IsReplay = false);
+    bool IsReplay = false,
+    int BoardVersion = 0);

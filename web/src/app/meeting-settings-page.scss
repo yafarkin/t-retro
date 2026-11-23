@@ -74,6 +74,70 @@ select {
   margin-top: 0;
 }
 
+.board-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.card-group {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border: 2px solid var(--tui-border-focus);
+  border-radius: 0.75rem;
+  background: var(--tui-background-neutral-1);
+}
+
+.card-group > label,
+.card-group > label input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.card-group > label input {
+  min-height: 2.5rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: 0.5rem;
+  font: inherit;
+}
+
+.move-controls {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.move-controls select {
+  width: 100%;
+  min-width: 0;
+}
+
+.proposal {
+  margin-bottom: 1rem;
+  background: var(--tui-background-neutral-1);
+}
+
+.proposal article {
+  margin: 0.75rem 0;
+}
+
+[draggable='true'] {
+  cursor: grab;
+}
+
+.drag-handle {
+  display: inline-block;
+  margin-bottom: 0.4rem;
+  color: var(--tui-text-secondary);
+  font-size: 0.75rem;
+  user-select: none;
+}
+
 .card {
   margin-top: 0.75rem;
   padding: 0.75rem;

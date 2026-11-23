@@ -49,15 +49,20 @@ public sealed partial class Program
         builder.Services.AddScoped<ISchemaVersionReader, SqliteSchemaVersionReader>();
         builder.Services.AddScoped<IDatabaseMigrator, SqliteDatabaseMigrator>();
         builder.Services.AddScoped<IMeetingRepository, SqliteMeetingRepository>();
+        builder.Services.AddScoped<IGroupingRepository, SqliteGroupingRepository>();
         builder.Services.AddScoped<ITemplateRepository, SqliteTemplateRepository>();
         builder.Services.AddScoped<DevLoginService>();
         builder.Services.AddScoped<MeetingAccessService>();
         builder.Services.AddScoped<MeetingService>();
         builder.Services.AddScoped<MeetingBoardService>();
+        builder.Services.AddScoped<GroupingService>();
         builder.Services.AddScoped<TemplateService>();
         builder.Services.AddScoped<InvitationService>();
         builder.Services.AddScoped<MemberService>();
         builder.Services.AddScoped<FacilitatorElectionService>();
+        builder.Services.AddSingleton<IGroupSuggestionProvider>(
+            new Infrastructure.Integrations.StubGroupSuggestionProvider(
+                builder.Configuration.GetValue<bool>("Integrations:Ai:Enabled")));
         builder.Services.AddSingleton<IPresenceService, Infrastructure.Presence.InMemoryPresenceService>();
         builder.Services.AddScoped<IMeetingNotifier, SignalRMeetingNotifier>();
         builder.Services.AddSingleton(TimeProvider.System);
@@ -94,6 +99,7 @@ public sealed partial class Program
 
         app.MapMeetingEndpoints();
         app.MapBoardEndpoints();
+        app.MapGroupingEndpoints();
         app.MapTemplateEndpoints();
         app.MapMemberEndpoints();
         app.MapHub<RetroHub>("/hubs/retro");

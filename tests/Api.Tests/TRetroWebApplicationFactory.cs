@@ -11,10 +11,15 @@ public sealed class TRetroWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string directory;
     private readonly string environment;
     private readonly bool deleteOnDispose;
+    private readonly bool aiEnabled;
 
-    public TRetroWebApplicationFactory(string environment = "Testing", string? databasePath = null)
+    public TRetroWebApplicationFactory(
+        string environment = "Testing",
+        string? databasePath = null,
+        bool aiEnabled = true)
     {
         this.environment = environment;
+        this.aiEnabled = aiEnabled;
         deleteOnDispose = databasePath is null;
         DatabasePath = databasePath ?? Path.Combine(
             Environment.CurrentDirectory,
@@ -34,6 +39,7 @@ public sealed class TRetroWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("ConnectionStrings:Default", $"Data Source={DatabasePath}");
         builder.UseSetting("Database:Provider", "SQLite");
         builder.UseSetting("DevAuthentication:Enabled", environment == "Testing" ? "true" : "false");
+        builder.UseSetting("Integrations:Ai:Enabled", aiEnabled ? "true" : "false");
         builder.ConfigureServices(services => services.AddSingleton<TimeProvider>(Time));
     }
 

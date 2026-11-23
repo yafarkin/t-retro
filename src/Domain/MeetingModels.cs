@@ -69,6 +69,8 @@ public sealed record Meeting(
 
 public sealed record MeetingColumn(Guid Id, Guid MeetingId, string Name, string Color, int Position);
 
+public sealed record MeetingGroup(Guid Id, Guid MeetingId, Guid ColumnId, string Name);
+
 public sealed record MeetingMember(
     Guid MeetingId,
     Guid UserId,
