@@ -115,7 +115,52 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 Guid.Parse(row.ColumnId),
                 row.Name))
             .ToArray();
-        return new MeetingStateData(MapMeeting(meetingRow), columns, participants, cards, readyUserIds, groups);
+        var topics = (await connection.QueryAsync<TopicRow>(
+            """
+            SELECT t.id AS Id, t.meeting_id AS MeetingId, t.kind AS Kind,
+                   COALESCE(t.card_id, t.group_id) AS SourceId
+            FROM topics t
+            LEFT JOIN cards c ON c.meeting_id = t.meeting_id AND c.id = t.card_id
+            LEFT JOIN groups g ON g.meeting_id = t.meeting_id AND g.id = t.group_id
+            LEFT JOIN columns col ON col.meeting_id = t.meeting_id
+                AND col.id = COALESCE(c.column_id, g.column_id)
+            WHERE t.meeting_id = @MeetingId
+            ORDER BY col.position, t.id;
+            """,
+            new { MeetingId = meetingId.ToString() }))
+            .Select(row => new MeetingTopic(
+                Guid.Parse(row.Id),
+                Guid.Parse(row.MeetingId),
+                Enum.Parse<TopicKind>(row.Kind),
+                Guid.Parse(row.SourceId)))
+            .ToArray();
+        var votes = (await connection.QueryAsync<VoteRow>(
+            "SELECT meeting_id AS MeetingId, topic_id AS TopicId, user_id AS UserId, count AS Count FROM votes WHERE meeting_id = @MeetingId;",
+            new { MeetingId = meetingId.ToString() }))
+            .Select(row => new VoteAllocation(
+                Guid.Parse(row.MeetingId),
+                Guid.Parse(row.TopicId),
+                Guid.Parse(row.UserId),
+                row.Count))
+            .ToArray();
+        var ballots = (await connection.QueryAsync<BallotRow>(
+            "SELECT meeting_id AS MeetingId, user_id AS UserId, version AS Version FROM personal_ballots WHERE meeting_id = @MeetingId;",
+            new { MeetingId = meetingId.ToString() }))
+            .Select(row => new PersonalBallot(
+                Guid.Parse(row.MeetingId),
+                Guid.Parse(row.UserId),
+                row.Version))
+            .ToArray();
+        return new MeetingStateData(
+            MapMeeting(meetingRow),
+            columns,
+            participants,
+            cards,
+            readyUserIds,
+            groups,
+            topics,
+            votes,
+            ballots);
     }
 
     public async Task<MeetingMember?> FindMemberAsync(
@@ -266,7 +311,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var transaction = connection.BeginTransaction(deferred: false);
         var meeting = await connection.QuerySingleOrDefaultAsync<InvitationRow>(
             "SELECT invitation_version AS InvitationVersion, phase AS Phase FROM meetings WHERE id = @MeetingId;",
             new { MeetingId = meetingId.ToString() },
@@ -304,6 +349,17 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             """,
             new { MeetingId = meetingId.ToString(), UserId = userId.ToString(), Now = DateTimeOffset.UtcNow.ToString("O") },
             transaction);
+        if (meeting.Phase == MeetingPhase.Vote.ToString())
+        {
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO personal_ballots (meeting_id, user_id, version)
+                VALUES (@MeetingId, @UserId, 0);
+                """,
+                new { MeetingId = meetingId.ToString(), UserId = userId.ToString() },
+                transaction);
+        }
+
         await transaction.CommitAsync(cancellationToken);
         return JoinMeetingResult.Joined;
     }
@@ -916,7 +972,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var transaction = connection.BeginTransaction(deferred: false);
         var state = await GetCommandStateAsync(connection, transaction, meetingId, facilitatorId);
         var accessError = CheckMemberAccess(state);
         if (accessError is not null)
@@ -950,6 +1006,11 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         if (state.Version != expectedVersion)
         {
             return new MeetingCommandResult(MeetingCommandStatus.VersionConflict);
+        }
+
+        if (fromPhase == MeetingPhase.Group && toPhase == MeetingPhase.Vote)
+        {
+            await InitializeVotingAsync(connection, transaction, meetingId);
         }
 
         var newVersion = expectedVersion + 1;
@@ -993,6 +1054,45 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             nowUtc);
         await transaction.CommitAsync(cancellationToken);
         return new MeetingCommandResult(MeetingCommandStatus.Success, newVersion);
+    }
+
+    private static async Task InitializeVotingAsync(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        Guid meetingId)
+    {
+        var parameters = new { MeetingId = meetingId.ToString() };
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO topics (meeting_id, id, kind, card_id, group_id)
+            SELECT meeting_id, id, 'Card', id, NULL FROM cards
+            WHERE meeting_id = @MeetingId AND group_id IS NULL;
+            """,
+            parameters,
+            transaction);
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO topics (meeting_id, id, kind, card_id, group_id)
+            SELECT meeting_id, id, 'Group', NULL, id FROM groups WHERE meeting_id = @MeetingId;
+            """,
+            parameters,
+            transaction);
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO personal_ballots (meeting_id, user_id, version)
+            SELECT meeting_id, user_id, 0 FROM members
+            WHERE meeting_id = @MeetingId AND status = 'Active';
+            """,
+            parameters,
+            transaction);
+        await connection.ExecuteAsync(
+            """
+            UPDATE meetings SET initial_card_count = (
+                SELECT COUNT(*) FROM cards WHERE cards.meeting_id = meetings.id)
+            WHERE id = @MeetingId;
+            """,
+            parameters,
+            transaction);
     }
 
     private static async Task<CommandStateRow?> GetCommandStateAsync(
@@ -1207,6 +1307,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 row.VotePercent,
                 row.VoteMinimum,
                 row.VoteFixed),
+            row.InitialCardCount,
             row.FacilitatorId is null ? null : Guid.Parse(row.FacilitatorId),
             row.InvitationVersion,
             row.Version,
@@ -1234,6 +1335,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         public int VotePercent { get; init; }
         public int VoteMinimum { get; init; }
         public int? VoteFixed { get; init; }
+        public int? InitialCardCount { get; init; }
         public string? FacilitatorId { get; init; }
         public int InvitationVersion { get; init; }
         public int Version { get; init; }
@@ -1309,6 +1411,29 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         public required string MeetingId { get; init; }
         public required string ColumnId { get; init; }
         public required string Name { get; init; }
+    }
+
+    private sealed class TopicRow
+    {
+        public required string Id { get; init; }
+        public required string MeetingId { get; init; }
+        public required string Kind { get; init; }
+        public required string SourceId { get; init; }
+    }
+
+    private sealed class VoteRow
+    {
+        public required string MeetingId { get; init; }
+        public required string TopicId { get; init; }
+        public required string UserId { get; init; }
+        public int Count { get; init; }
+    }
+
+    private sealed class BallotRow
+    {
+        public required string MeetingId { get; init; }
+        public required string UserId { get; init; }
+        public int Version { get; init; }
     }
 
     private sealed class CommandStateRow

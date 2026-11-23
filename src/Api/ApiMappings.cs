@@ -48,6 +48,24 @@ public static class ApiMappings
                 group.Id.ToString(),
                 group.ColumnId.ToString(),
                 group.Name)).ToArray(),
+            snapshot.Topics.Select(topic => new MeetingTopicResponse(
+                topic.Id.ToString(),
+                topic.Kind.ToString().ToLowerInvariant(),
+                topic.SourceId.ToString(),
+                topic.TotalVotes,
+                topic.MyVotes,
+                topic.Voters?.Select(voter => new MeetingTopicVoterResponse(
+                    voter.UserId.ToString(),
+                    voter.DisplayName,
+                    voter.Count)).ToArray())).ToArray(),
+            snapshot.Voting is null
+                ? null
+                : new MeetingVotingResponse(
+                    snapshot.Voting.OriginalCardCount,
+                    snapshot.Voting.Budget,
+                    snapshot.Voting.Spent,
+                    snapshot.Voting.Remaining,
+                    snapshot.Voting.BallotVersion),
             new MeetingIntegrationsResponse(snapshot.Integrations.Ai),
             snapshot.Readiness is null
                 ? null

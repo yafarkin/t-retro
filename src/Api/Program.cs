@@ -50,12 +50,14 @@ public sealed partial class Program
         builder.Services.AddScoped<IDatabaseMigrator, SqliteDatabaseMigrator>();
         builder.Services.AddScoped<IMeetingRepository, SqliteMeetingRepository>();
         builder.Services.AddScoped<IGroupingRepository, SqliteGroupingRepository>();
+        builder.Services.AddScoped<IVotingRepository, SqliteVotingRepository>();
         builder.Services.AddScoped<ITemplateRepository, SqliteTemplateRepository>();
         builder.Services.AddScoped<DevLoginService>();
         builder.Services.AddScoped<MeetingAccessService>();
         builder.Services.AddScoped<MeetingService>();
         builder.Services.AddScoped<MeetingBoardService>();
         builder.Services.AddScoped<GroupingService>();
+        builder.Services.AddScoped<VotingService>();
         builder.Services.AddScoped<TemplateService>();
         builder.Services.AddScoped<InvitationService>();
         builder.Services.AddScoped<MemberService>();
@@ -100,6 +102,7 @@ public sealed partial class Program
         app.MapMeetingEndpoints();
         app.MapBoardEndpoints();
         app.MapGroupingEndpoints();
+        app.MapVotingEndpoints();
         app.MapTemplateEndpoints();
         app.MapMemberEndpoints();
         app.MapHub<RetroHub>("/hubs/retro");

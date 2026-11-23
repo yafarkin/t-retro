@@ -85,6 +85,29 @@ export class MeetingService {
     });
   }
 
+  updateVoteSettings(
+    meetingId: string,
+    expectedVersion: number,
+    settings: MeetingState['voteSettings'],
+  ): Observable<{ version: number }> {
+    return this.http.put<{ version: number }>(`/api/meetings/${meetingId}/vote-settings`, {
+      ...settings,
+      expectedVersion,
+    });
+  }
+
+  setMyVotes(
+    meetingId: string,
+    topicId: string,
+    count: number,
+    expectedVersion: number,
+  ): Observable<{ version: number; ballotVersion: number; remaining: number }> {
+    return this.http.put<{ version: number; ballotVersion: number; remaining: number }>(
+      `/api/meetings/${meetingId}/topics/${topicId}/my-votes`,
+      { count, expectedVersion },
+    );
+  }
+
   move(
     meetingId: string,
     sourceKind: string,

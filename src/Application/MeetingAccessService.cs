@@ -48,14 +48,61 @@ public sealed class MeetingAccessService(
                 activeParticipantIds.Count,
                 state.ReadyUserIds.Contains(userId))
             : null;
+        var showTopics = state.Meeting.Phase is MeetingPhase.Vote or MeetingPhase.Discuss;
+        var topics = showTopics
+            ? state.Topics.Select(topic => ProjectTopic(state, participants, topic, userId)).ToArray()
+            : [];
+        var voting = state.Meeting.Phase == MeetingPhase.Vote
+            ? ProjectVoting(state, userId)
+            : null;
         return new MeetingSnapshot(
             state.Meeting,
             state.Columns,
             participants,
             cards,
             state.Groups,
+            topics,
+            voting,
             readiness,
             new MeetingIntegrations(groupSuggestions.IsAvailable),
             userId);
+    }
+
+    private static MeetingTopicResult ProjectTopic(
+        MeetingStateData state,
+        IReadOnlyList<MeetingParticipant> participants,
+        MeetingTopic topic,
+        Guid viewerId)
+    {
+        var votes = state.Votes.Where(vote => vote.TopicId == topic.Id).ToArray();
+        var voters = state.Meeting.AnonymousVotes
+            ? null
+            : votes.Select(vote =>
+            {
+                var participant = participants.Single(item => item.UserId == vote.UserId);
+                return new MeetingTopicVoter(vote.UserId, participant.DisplayName, vote.Count);
+            }).ToArray();
+        return new MeetingTopicResult(
+            topic.Id,
+            topic.Kind,
+            topic.SourceId,
+            votes.Sum(vote => vote.Count),
+            votes.Where(vote => vote.UserId == viewerId).Sum(vote => vote.Count),
+            voters);
+    }
+
+    private static MeetingVoting ProjectVoting(MeetingStateData state, Guid viewerId)
+    {
+        var originalCardCount = state.Meeting.InitialCardCount
+            ?? throw new InvalidOperationException("Voting has no original card count.");
+        var budget = state.Meeting.VoteSettings.BudgetFor(originalCardCount);
+        var spent = state.Votes.Where(vote => vote.UserId == viewerId).Sum(vote => vote.Count);
+        var ballotVersion = state.Ballots.SingleOrDefault(ballot => ballot.UserId == viewerId)?.Version ?? 0;
+        return new MeetingVoting(
+            originalCardCount,
+            budget,
+            spent,
+            budget - spent,
+            ballotVersion);
     }
 }

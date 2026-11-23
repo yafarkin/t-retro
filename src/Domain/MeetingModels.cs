@@ -50,6 +50,18 @@ public sealed record VoteBudgetSettings(VoteMode Mode, int Percent, int Minimum,
 
         return new VoteBudgetSettings(mode, 5, 2, fixedBudget);
     }
+
+    public int BudgetFor(int originalCardCount)
+    {
+        if (originalCardCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(originalCardCount));
+        }
+
+        return Mode == VoteMode.Fixed
+            ? Fixed!.Value
+            : Math.Max(Minimum, (int)Math.Ceiling(originalCardCount * (double)Percent / 100));
+    }
 }
 
 public sealed record Meeting(
@@ -60,6 +72,7 @@ public sealed record Meeting(
     bool PrivateCollection,
     bool AnonymousVotes,
     VoteBudgetSettings VoteSettings,
+    int? InitialCardCount,
     Guid? FacilitatorId,
     int InvitationVersion,
     int Version,

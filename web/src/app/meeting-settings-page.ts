@@ -459,6 +459,84 @@ export class MeetingSettingsPage {
     return this.state()?.cards.filter((card) => ids.has(card.id)) ?? [];
   }
 
+  saveVoteSettings(): void {
+    const current = this.state();
+    if (!current || this.commandsBlocked()) {
+      return;
+    }
+    this.busy.set(true);
+    this.error.set(null);
+    this.notice.set(null);
+    this.meetings.updateVoteSettings(this.meetingId, current.version, this.voteSettings()).subscribe({
+      next: () => {
+        this.notice.set('Бюджет голосов обновлён.');
+        void this.sync.refresh().finally(() => this.busy.set(false));
+      },
+      error: (error: HttpErrorResponse) => {
+        this.commandFailed(error);
+        void this.sync.refresh();
+      },
+    });
+  }
+
+  changeVotes(topic: MeetingState['topics'][number], change: number): void {
+    const current = this.state();
+    if (!current?.voting || this.commandsBlocked()) {
+      return;
+    }
+    const count = topic.myVotes + change;
+    if (count < 0 || count - topic.myVotes > current.voting.remaining) {
+      return;
+    }
+    this.busy.set(true);
+    this.error.set(null);
+    this.notice.set(null);
+    this.meetings.setMyVotes(this.meetingId, topic.id, count, current.voting.ballotVersion).subscribe({
+      next: () => {
+        void this.sync.refresh().finally(() => this.busy.set(false));
+      },
+      error: (error: HttpErrorResponse) => {
+        this.commandFailed(error);
+        void this.sync.refresh();
+      },
+    });
+  }
+
+  topicTitle(topic: MeetingState['topics'][number]): string {
+    const current = this.state();
+    if (topic.kind === 'group') {
+      return current?.groups.find((group) => group.id === topic.sourceId)?.name ?? 'Группа';
+    }
+    return current?.cards.find((card) => card.id === topic.sourceId)?.text ?? 'Карточка';
+  }
+
+  topicColumnName(topic: MeetingState['topics'][number]): string {
+    const current = this.state();
+    const columnId = topic.kind === 'group'
+      ? current?.groups.find((group) => group.id === topic.sourceId)?.columnId
+      : current?.cards.find((card) => card.id === topic.sourceId)?.columnId;
+    return columnId ? this.columnName(columnId) : '';
+  }
+
+  topicCardCount(topic: MeetingState['topics'][number]): number {
+    const current = this.state();
+    return topic.kind === 'group'
+      ? current?.cards.filter((card) => card.groupId === topic.sourceId).length ?? 0
+      : 1;
+  }
+
+  budgetFormula(): string {
+    const current = this.state();
+    if (!current?.voting) {
+      return '';
+    }
+    if (current.voteSettings.mode === 'fixed') {
+      return `Фиксированный бюджет B = ${current.voting.budget}.`;
+    }
+    const voting = current.voting;
+    return `B = max(${current.voteSettings.minimum}, ceil(${voting.originalCardCount} × ${current.voteSettings.percent} / 100)) = ${voting.budget}.`;
+  }
+
   columnName(columnId: string): string {
     return this.state()?.columns.find((column) => column.id === columnId)?.name ?? '';
   }

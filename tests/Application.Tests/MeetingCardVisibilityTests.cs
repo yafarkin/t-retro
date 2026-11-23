@@ -70,6 +70,7 @@ public sealed class MeetingCardVisibilityTests
             true,
             VoteBudgetSettings.Default,
             null,
+            null,
             1,
             1,
             1,

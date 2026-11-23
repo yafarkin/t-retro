@@ -47,6 +47,7 @@ public sealed class SqliteDatabaseTests : IDisposable
             true,
             true,
             VoteBudgetSettings.Default,
+            null,
             employee.Id,
             1,
             1,

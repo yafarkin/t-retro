@@ -50,6 +50,82 @@
         </section>
       }
 
+      @if (meeting.phase === 'Vote') {
+        <section class="voting-summary">
+          <h2>Бюджет голосов</h2>
+          @if (meeting.voting; as voting) {
+            <p>Исходных карточек: {{ voting.originalCardCount }}. {{ budgetFormula() }}</p>
+            <p class="budget-numbers">
+              <strong>Бюджет: {{ voting.budget }}</strong>
+              <span>Потрачено: {{ voting.spent }}</span>
+              <span>Осталось: {{ voting.remaining }}</span>
+            </p>
+          }
+        </section>
+
+        @if (meeting.canManage) {
+          <section>
+            <h2>Настройки голосования</h2>
+            <form class="vote-settings" (ngSubmit)="saveVoteSettings()">
+              <label>
+                Способ расчёта
+                <select aria-label="Способ расчёта бюджета" name="activeVoteMode" [(ngModel)]="voteSettings().mode">
+                  <option value="percent">Процент от числа карточек</option>
+                  <option value="fixed">Фиксированный бюджет</option>
+                </select>
+              </label>
+              @if (voteSettings().mode === 'percent') {
+                <label>Процент P <input type="number" aria-label="Процент голосов" name="activeVotePercent" min="0" max="100" required [(ngModel)]="voteSettings().percent" /></label>
+                <label>Минимум M <input type="number" aria-label="Минимум голосов" name="activeVoteMinimum" min="1" required [(ngModel)]="voteSettings().minimum" /></label>
+              } @else {
+                <label>Голосов на человека <input type="number" aria-label="Фиксированный бюджет" name="activeVoteFixed" min="1" required [(ngModel)]="voteSettings().fixed" /></label>
+              }
+              <button tuiButton type="submit" [disabled]="commandsBlocked()">Сохранить бюджет</button>
+            </form>
+          </section>
+        }
+
+        <section class="topics-section">
+          <h2>Темы для голосования</h2>
+          @for (topic of meeting.topics; track topic.id) {
+            <article class="vote-topic">
+              <div>
+                <h3>{{ topicTitle(topic) }}</h3>
+                <p class="hint">{{ topicColumnName(topic) }} · {{ topicCardCount(topic) }} карточек</p>
+              </div>
+              <p><strong>Всего голосов: {{ topic.totalVotes }}</strong></p>
+              <p>Ваши голоса: {{ topic.myVotes }}</p>
+              <div class="vote-actions">
+                <button
+                  tuiButton
+                  type="button"
+                  size="s"
+                  appearance="secondary"
+                  [attr.aria-label]="'Отозвать голос: ' + topicTitle(topic)"
+                  (click)="changeVotes(topic, -1)"
+                  [disabled]="topic.myVotes === 0 || commandsBlocked()">−</button>
+                <button
+                  tuiButton
+                  type="button"
+                  size="s"
+                  [attr.aria-label]="'Проголосовать: ' + topicTitle(topic)"
+                  (click)="changeVotes(topic, 1)"
+                  [disabled]="!meeting.voting || meeting.voting.remaining === 0 || commandsBlocked()">Проголосовать</button>
+              </div>
+              @if (topic.voters; as voters) {
+                <ul class="vote-breakdown" aria-label="Расклад голосов">
+                  @for (voter of voters; track voter.userId) {
+                    <li>{{ voter.displayName }}: {{ voter.count }}</li>
+                  }
+                </ul>
+              }
+            </article>
+          } @empty {
+            <p>Тем для голосования нет.</p>
+          }
+        </section>
+      }
+
       @if (meeting.phase === 'Draft') {
         @if (meeting.canManage) {
           <section>

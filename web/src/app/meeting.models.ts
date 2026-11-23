@@ -67,6 +67,29 @@ export interface MeetingReadiness {
   myReady: boolean;
 }
 
+export interface MeetingTopicVoter {
+  userId: string;
+  displayName: string;
+  count: number;
+}
+
+export interface MeetingTopic {
+  id: string;
+  kind: 'card' | 'group';
+  sourceId: string;
+  totalVotes: number;
+  myVotes: number;
+  voters?: MeetingTopicVoter[];
+}
+
+export interface MeetingVoting {
+  originalCardCount: number;
+  budget: number;
+  spent: number;
+  remaining: number;
+  ballotVersion: number;
+}
+
 export interface SuggestedGroup {
   name: string;
   columnId: string;
@@ -91,6 +114,8 @@ export interface MeetingState extends MeetingSettingsPayload {
   participants: Participant[];
   cards: MeetingCard[];
   groups: MeetingGroup[];
+  topics: MeetingTopic[];
+  voting?: MeetingVoting;
   integrations: { ai: boolean };
   readiness?: MeetingReadiness;
 }

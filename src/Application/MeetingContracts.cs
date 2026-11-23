@@ -19,7 +19,10 @@ public sealed record MeetingStateData(
     IReadOnlyList<MeetingParticipant> Participants,
     IReadOnlyList<CardData> Cards,
     IReadOnlySet<Guid> ReadyUserIds,
-    IReadOnlyList<MeetingGroup> Groups);
+    IReadOnlyList<MeetingGroup> Groups,
+    IReadOnlyList<MeetingTopic> Topics,
+    IReadOnlyList<VoteAllocation> Votes,
+    IReadOnlyList<PersonalBallot> Ballots);
 
 public sealed record MeetingIntegrations(bool Ai);
 
@@ -29,6 +32,8 @@ public sealed record MeetingSnapshot(
     IReadOnlyList<MeetingParticipant> Participants,
     IReadOnlyList<MeetingCard> Cards,
     IReadOnlyList<MeetingGroup> Groups,
+    IReadOnlyList<MeetingTopicResult> Topics,
+    MeetingVoting? Voting,
     MeetingReadiness? Readiness,
     MeetingIntegrations Integrations,
     Guid CurrentUserId)

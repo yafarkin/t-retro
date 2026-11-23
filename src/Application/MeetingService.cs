@@ -28,6 +28,7 @@ public sealed class MeetingService(
             privacy.PrivateCollection,
             privacy.AnonymousVotes,
             ParseVoteSettings(voteMode, votePercent, voteMinimum, fixedBudget),
+            null,
             userId,
             1,
             1,
