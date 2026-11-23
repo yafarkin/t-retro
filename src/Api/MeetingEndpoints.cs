@@ -50,6 +50,17 @@ public static class MeetingEndpoints
             var snapshot = await service.GetStateAsync(CurrentUser.Id(user), meetingId, cancellationToken);
             return Results.Ok(ApiMappings.ToResponse(snapshot));
         });
+        meetings.MapGet("/{meetingId:guid}/report.pdf", async (
+            Guid meetingId,
+            ClaimsPrincipal user,
+            MeetingReportService service,
+            HttpContext context,
+            CancellationToken cancellationToken) =>
+        {
+            var report = await service.GetAsync(CurrentUser.Id(user), meetingId, cancellationToken);
+            context.Response.Headers["Cache-Control"] = "private, no-store";
+            return Results.File(report, "application/pdf");
+        });
         meetings.MapPut("/{meetingId:guid}/settings", async (
             Guid meetingId,
             UpdateMeetingSettingsRequest request,

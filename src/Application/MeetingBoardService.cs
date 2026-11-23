@@ -4,6 +4,7 @@ namespace Application;
 
 public sealed class MeetingBoardService(
     IMeetingRepository meetings,
+    IMeetingCompletionRepository completion,
     MeetingAccessService access,
     IMeetingNotifier notifier,
     IMeetingTimer timer,
@@ -115,25 +116,27 @@ public sealed class MeetingBoardService(
             throw new DomainValidationException("InvalidPhase", "Неизвестная фаза встречи.");
         }
 
-        if (parsedPhase == MeetingPhase.Discuss)
-        {
-            throw new ConflictException(
-                "CompletionUnavailable",
-                "Завершение встречи станет доступно вместе с итогами и PDF.");
-        }
-
-        var nextPhase = MeetingPhaseRules.Next(parsedPhase);
         await access.GetAsync(userId, meetingId, true, cancellationToken);
-        var result = await meetings.AdvanceAsync(
-            meetingId,
-            userId,
-            parsedPhase,
-            nextPhase,
-            expectedVersion,
-            operationId,
-            CommandFingerprint.Create(parsedPhase, expectedVersion),
-            timeProvider.GetUtcNow(),
-            cancellationToken);
+        var fingerprint = CommandFingerprint.Create(parsedPhase, expectedVersion);
+        var result = parsedPhase == MeetingPhase.Discuss
+            ? await completion.CompleteAsync(
+                meetingId,
+                userId,
+                expectedVersion,
+                operationId,
+                fingerprint,
+                timeProvider.GetUtcNow(),
+                cancellationToken)
+            : await meetings.AdvanceAsync(
+                meetingId,
+                userId,
+                parsedPhase,
+                MeetingPhaseRules.Next(parsedPhase),
+                expectedVersion,
+                operationId,
+                fingerprint,
+                timeProvider.GetUtcNow(),
+                cancellationToken);
         if (result.Status == MeetingCommandStatus.Success && !result.IsReplay)
         {
             timer.Cancel(meetingId);

@@ -170,6 +170,13 @@ public sealed record MeetingIntegrationsResponse(bool Ai, bool Jira);
 
 public sealed record MeetingReadinessResponse(int ReadyCount, int TotalCount, bool MyReady);
 
+public sealed record MeetingTotalsResponse(
+    DateTimeOffset ClosedAtUtc,
+    int ParticipantCount,
+    int CardCount,
+    int TopicCount,
+    int VoteCount);
+
 public sealed record MeetingStateResponse(
     DateTimeOffset ServerNowUtc,
     string Id,
@@ -192,7 +199,8 @@ public sealed record MeetingStateResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingDiscussionResponse? Discussion,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingTimerResponse? Timer,
     MeetingIntegrationsResponse Integrations,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingReadinessResponse? Readiness);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingReadinessResponse? Readiness,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingTotalsResponse? Totals);
 
 public sealed class SelectCurrentTopicRequest
 {

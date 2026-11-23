@@ -49,6 +49,8 @@ public sealed partial class Program
         builder.Services.AddScoped<ISchemaVersionReader, SqliteSchemaVersionReader>();
         builder.Services.AddScoped<IDatabaseMigrator, SqliteDatabaseMigrator>();
         builder.Services.AddScoped<IMeetingRepository, SqliteMeetingRepository>();
+        builder.Services.AddScoped<IMeetingCompletionRepository, SqliteMeetingCompletionRepository>();
+        builder.Services.AddSingleton<IMeetingReportGenerator, Infrastructure.Reporting.PdfSharpMeetingReportGenerator>();
         builder.Services.AddScoped<IGroupingRepository, SqliteGroupingRepository>();
         builder.Services.AddScoped<IVotingRepository, SqliteVotingRepository>();
         builder.Services.AddScoped<IDiscussionRepository, SqliteDiscussionRepository>();
@@ -57,6 +59,7 @@ public sealed partial class Program
         builder.Services.AddScoped<DevLoginService>();
         builder.Services.AddScoped<MeetingAccessService>();
         builder.Services.AddScoped<MeetingService>();
+        builder.Services.AddScoped<MeetingReportService>();
         builder.Services.AddScoped<MeetingBoardService>();
         builder.Services.AddScoped<GroupingService>();
         builder.Services.AddScoped<VotingService>();

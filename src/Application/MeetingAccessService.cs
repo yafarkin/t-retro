@@ -51,14 +51,14 @@ public sealed class MeetingAccessService(
                 activeParticipantIds.Count,
                 state.ReadyUserIds.Contains(userId))
             : null;
-        var showTopics = state.Meeting.Phase is MeetingPhase.Vote or MeetingPhase.Discuss;
+        var showTopics = state.Meeting.Phase is MeetingPhase.Vote or MeetingPhase.Discuss or MeetingPhase.Closed;
         var topics = showTopics
             ? state.Topics.Select(topic => ProjectTopic(state, participants, topic, userId)).ToArray()
             : [];
         var voting = state.Meeting.Phase == MeetingPhase.Vote
             ? ProjectVoting(state, userId)
             : null;
-        var discussion = state.Meeting.Phase == MeetingPhase.Discuss
+        var discussion = state.Meeting.Phase is MeetingPhase.Discuss or MeetingPhase.Closed
             ? new MeetingDiscussion(
                 state.DiscussionQueue,
                 state.CurrentTopicId,
@@ -87,7 +87,8 @@ public sealed class MeetingAccessService(
             readiness,
             currentTimer,
             new MeetingIntegrations(groupSuggestions.IsAvailable, jiraExporter.IsAvailable),
-            userId);
+            userId,
+            state.Completion);
     }
 
     private static MeetingTopicResult ProjectTopic(
@@ -104,11 +105,13 @@ public sealed class MeetingAccessService(
                 var participant = participants.Single(item => item.UserId == vote.UserId);
                 return new MeetingTopicVoter(vote.UserId, participant.DisplayName, vote.Count);
             }).ToArray();
+        var totalVotes = state.TopicTotals?.SingleOrDefault(total => total.TopicId == topic.Id)?.TotalVotes
+            ?? votes.Sum(vote => vote.Count);
         return new MeetingTopicResult(
             topic.Id,
             topic.Kind,
             topic.SourceId,
-            votes.Sum(vote => vote.Count),
+            totalVotes,
             votes.Where(vote => vote.UserId == viewerId).Sum(vote => vote.Count),
             voters);
     }

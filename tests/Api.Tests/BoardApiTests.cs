@@ -180,6 +180,13 @@ public sealed class BoardApiTests
         var voting = await facilitator.GetFromJsonAsync<MeetingStateResponse>($"/api/meetings/{meeting.Id}/state");
         await AdvanceAsync(facilitator, meeting.Id, "Vote", voting!.Version);
         var discussion = await facilitator.GetFromJsonAsync<MeetingStateResponse>($"/api/meetings/{meeting.Id}/state");
+        await using var connection = new SqliteConnection($"Data Source={factory.DatabasePath}");
+        await connection.OpenAsync();
+        await using var fingerprintCommand = connection.CreateCommand();
+        fingerprintCommand.CommandText = "SELECT fingerprint FROM command_deduplication WHERE operation_type = 'CreateCard';";
+        var fingerprint = (string)(await fingerprintCommand.ExecuteScalarAsync())!;
+        Assert.DoesNotContain("Карточка", fingerprint);
+
         var completion = await facilitator.PostAsJsonAsync(
             $"/api/meetings/{meeting.Id}/advance",
             new AdvanceMeetingRequest
@@ -188,19 +195,16 @@ public sealed class BoardApiTests
                 ExpectedVersion = discussion!.Version,
                 OperationId = Guid.NewGuid(),
             });
-        Assert.Equal(HttpStatusCode.Conflict, completion.StatusCode);
+        completion.EnsureSuccessStatusCode();
         var afterCompletion = await facilitator.GetFromJsonAsync<MeetingStateResponse>($"/api/meetings/{meeting.Id}/state");
-        Assert.Equal("Discuss", afterCompletion!.Phase);
+        Assert.Equal("Closed", afterCompletion!.Phase);
 
-        await using var connection = new SqliteConnection($"Data Source={factory.DatabasePath}");
-        await connection.OpenAsync();
         await using var authorsCommand = connection.CreateCommand();
         authorsCommand.CommandText = "SELECT COUNT(*) FROM card_authors;";
-        Assert.Equal(2L, (long)(await authorsCommand.ExecuteScalarAsync())!);
+        Assert.Equal(0L, (long)(await authorsCommand.ExecuteScalarAsync())!);
         await using var dedupCommand = connection.CreateCommand();
-        dedupCommand.CommandText = "SELECT fingerprint FROM command_deduplication WHERE operation_type = 'CreateCard';";
-        var fingerprint = (string)(await dedupCommand.ExecuteScalarAsync())!;
-        Assert.DoesNotContain("Карточка", fingerprint);
+        dedupCommand.CommandText = "SELECT COUNT(*) FROM command_deduplication WHERE operation_type = 'CreateCard';";
+        Assert.Equal(0L, (long)(await dedupCommand.ExecuteScalarAsync())!);
     }
 
     [Fact]

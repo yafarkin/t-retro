@@ -81,7 +81,15 @@ public static class ApiMappings
                 : new MeetingReadinessResponse(
                     snapshot.Readiness.ReadyCount,
                     snapshot.Readiness.TotalCount,
-                    snapshot.Readiness.MyReady));
+                    snapshot.Readiness.MyReady),
+            snapshot.Completion is null
+                ? null
+                : new MeetingTotalsResponse(
+                    snapshot.Completion.ClosedAtUtc,
+                    snapshot.Completion.ParticipantCount,
+                    snapshot.Completion.CardCount,
+                    snapshot.Completion.TopicCount,
+                    snapshot.Completion.VoteCount));
 
     public static ColumnInput ToInput(ColumnRequest column) => new(column.Name, column.Color);
 

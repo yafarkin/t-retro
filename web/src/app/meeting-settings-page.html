@@ -28,7 +28,7 @@
         <p class="notice" role="status">{{ message }}</p>
       }
 
-      @if (meeting.canManage && meeting.phase !== 'Discuss' && meeting.phase !== 'Closed') {
+      @if (meeting.canManage && meeting.phase !== 'Closed') {
         <section class="facilitator-actions">
           <h2>Действия фасилитатора</h2>
           <button tuiButton type="button" (click)="advance()" [disabled]="commandsBlocked()">{{ advanceLabel(meeting.phase) }}</button>
@@ -80,6 +80,58 @@
             </div>
           }
         </section>
+      }
+
+      @if (meeting.phase === 'Closed') {
+        @if (meeting.totals; as totals) {
+          <section class="closed-summary">
+            <h2>Итоги встречи</h2>
+            <p>Завершена {{ formatClosedAt(totals.closedAtUtc) }} UTC.</p>
+            <p>Участников: {{ totals.participantCount }}. Карточек: {{ totals.cardCount }}. Тем: {{ totals.topicCount }}. Голосов: {{ totals.voteCount }}.</p>
+            <a tuiButton href="/api/meetings/{{ meeting.id }}/report.pdf" target="_blank" rel="noopener noreferrer">Скачать PDF</a>
+          </section>
+        }
+        @if (meeting.discussion; as discussion) {
+          <section class="discussion-queue closed-results">
+            <h2>Рейтинг и итоги обсуждения</h2>
+            @for (queueItem of discussion.queue; track queueItem.topicId) {
+              @if (discussionTopic(queueItem.topicId); as topic) {
+                <article class="discussion-queue-item">
+                  <h3>{{ queueItem.position + 1 }}. {{ topicTitle(topic) }}</h3>
+                  <p>{{ topicColumnName(topic) }} · Всего голосов: {{ topic.totalVotes }} · {{ discussionStatusLabel(queueItem.status) }}</p>
+                  @if (topic.voters; as voters) {
+                    <ul class="vote-breakdown" aria-label="Расклад голосов">
+                      @for (voter of voters; track voter.userId) {
+                        <li>{{ voter.displayName }}: {{ voter.count }}</li>
+                      }
+                    </ul>
+                  }
+                  @for (decision of decisionsForTopic(topic.id); track decision.id) {
+                    <p><strong>Решение:</strong> {{ decision.text }}</p>
+                  }
+                  @for (comment of commentsForTopic(topic.id); track comment.id) {
+                    <p><strong>Комментарий:</strong> {{ comment.text }}</p>
+                  }
+                  @for (action of actionsForTopic(topic.id); track action.id) {
+                    <div class="discussion-entry">
+                      <p><strong>Задача:</strong> {{ action.text }}</p>
+                      <p>Исполнитель: {{ actionAssigneeName(action.assigneeId) }}</p>
+                      <p class="hint">{{ exportStatusLabel(action.exportStatus) }}</p>
+                      @if (action.issueKey; as issueKey) {
+                        <p><a [href]="action.issueUrl" target="_blank" rel="noopener noreferrer">{{ issueKey }}</a></p>
+                      }
+                      @if (canExport(action)) {
+                        <button tuiButton type="button" size="s" (click)="exportAction(action)" [disabled]="commandsBlocked()">Экспортировать в mock Jira</button>
+                      }
+                    </div>
+                  }
+                </article>
+              }
+            } @empty {
+              <p>Тем для обсуждения нет.</p>
+            }
+          </section>
+        }
       }
 
       @if (meeting.phase === 'Discuss' && meeting.discussion; as discussion) {

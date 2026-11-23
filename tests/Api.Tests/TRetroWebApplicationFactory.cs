@@ -1,4 +1,5 @@
 using Api;
+using Application;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
@@ -22,7 +23,8 @@ public sealed class TRetroWebApplicationFactory : WebApplicationFactory<Program>
         bool aiEnabled = true,
         bool jiraEnabled = true,
         string jiraOutcome = "Created",
-        int jiraDelayMs = 0)
+        int jiraDelayMs = 0,
+        bool failPdf = false)
     {
         this.environment = environment;
         this.aiEnabled = aiEnabled;
@@ -36,11 +38,17 @@ public sealed class TRetroWebApplicationFactory : WebApplicationFactory<Program>
             Guid.NewGuid().ToString(),
             "test.db");
         directory = Path.GetDirectoryName(DatabasePath)!;
+        if (failPdf)
+        {
+            FailingReportGenerator = new FailingMeetingReportGenerator();
+        }
     }
 
     public string DatabasePath { get; }
 
     public TestTimeProvider Time { get; } = new();
+
+    public FailingMeetingReportGenerator? FailingReportGenerator { get; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -52,7 +60,14 @@ public sealed class TRetroWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("Integrations:Jira:Enabled", jiraEnabled ? "true" : "false");
         builder.UseSetting("Integrations:Jira:Outcome", jiraOutcome);
         builder.UseSetting("Integrations:Jira:DelayMs", jiraDelayMs.ToString());
-        builder.ConfigureServices(services => services.AddSingleton<TimeProvider>(Time));
+        builder.ConfigureServices(services =>
+        {
+            services.AddSingleton<TimeProvider>(Time);
+            if (FailingReportGenerator is not null)
+            {
+                services.AddSingleton<IMeetingReportGenerator>(FailingReportGenerator);
+            }
+        });
     }
 
     protected override void Dispose(bool disposing)

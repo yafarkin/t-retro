@@ -2,7 +2,7 @@ using Domain;
 
 namespace Application;
 
-public sealed record CardData(Card Card, Guid AuthorId, string AuthorDisplayName);
+public sealed record CardData(Card Card, Guid? AuthorId, string? AuthorDisplayName);
 
 public sealed record MeetingCard(
     Guid Id,

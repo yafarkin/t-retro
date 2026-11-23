@@ -156,6 +156,14 @@ export interface MeetingTimer {
   serverNowUtc: string;
 }
 
+export interface MeetingTotals {
+  closedAtUtc: string;
+  participantCount: number;
+  cardCount: number;
+  topicCount: number;
+  voteCount: number;
+}
+
 export interface MeetingState extends MeetingSettingsPayload {
   serverNowUtc: string;
   id: string;
@@ -174,6 +182,7 @@ export interface MeetingState extends MeetingSettingsPayload {
   timer?: MeetingTimer;
   integrations: { ai: boolean; jira: boolean };
   readiness?: MeetingReadiness;
+  totals?: MeetingTotals;
 }
 
 export interface Invite {

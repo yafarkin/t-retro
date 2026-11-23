@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text.Json;
 using Application;
 using Dapper;
 using Domain;
@@ -42,12 +43,22 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        return await ReadStateAsync(connection, meetingId);
+    }
+
+    internal static async Task<MeetingStateData?> ReadStateAsync(IDbConnection connection, Guid meetingId)
+    {
         var meetingRow = await connection.QuerySingleOrDefaultAsync<MeetingRow>(
             "SELECT * FROM meetings WHERE id = @MeetingId;",
             new { MeetingId = meetingId.ToString() });
         if (meetingRow is null)
         {
             return null;
+        }
+
+        if (meetingRow.Phase == MeetingPhase.Closed.ToString())
+        {
+            return await ReadClosedStateAsync(connection, meetingRow);
         }
 
         var columns = (await connection.QueryAsync<MeetingColumnRow>(
@@ -241,6 +252,45 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             decisions,
             actions,
             exports);
+    }
+
+    private static async Task<MeetingStateData> ReadClosedStateAsync(
+        IDbConnection connection,
+        MeetingRow meetingRow)
+    {
+        var payload = await connection.ExecuteScalarAsync<string?>(
+            "SELECT payload_json FROM meeting_totals WHERE meeting_id = @MeetingId;",
+            new { MeetingId = meetingRow.Id });
+        if (payload is null)
+        {
+            throw new InvalidOperationException("Closed meeting totals are missing.");
+        }
+
+        var state = JsonSerializer.Deserialize<MeetingStateData>(payload)
+            ?? throw new InvalidOperationException("Closed meeting totals are invalid.");
+        var exports = (await connection.QueryAsync<ExportRow>(
+            """
+            SELECT meeting_id AS MeetingId, action_id AS ActionId,
+                   external_request_id AS ExternalRequestId, status AS Status,
+                   issue_key AS IssueKey, issue_url AS IssueUrl
+            FROM exports WHERE meeting_id = @MeetingId ORDER BY action_id;
+            """,
+            new { MeetingId = meetingRow.Id }))
+            .Select(row => new JiraExport(
+                Guid.Parse(row.MeetingId),
+                Guid.Parse(row.ActionId),
+                Guid.Parse(row.ExternalRequestId),
+                Enum.Parse<JiraExportStatus>(row.Status),
+                row.IssueKey,
+                row.IssueUrl))
+            .ToArray();
+        return state with
+        {
+            Meeting = MapMeeting(meetingRow),
+            ReadyUserIds = new HashSet<Guid>(),
+            Ballots = [],
+            Exports = exports,
+        };
     }
 
     public async Task<MeetingMember?> FindMemberAsync(

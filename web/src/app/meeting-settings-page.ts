@@ -654,6 +654,26 @@ export class MeetingSettingsPage {
     return current?.discussion?.actions.filter((action) => action.topicId === topic?.id) ?? [];
   }
 
+  commentsForTopic(topicId: string): TopicComment[] {
+    return this.state()?.discussion?.comments.filter((comment) => comment.topicId === topicId) ?? [];
+  }
+
+  decisionsForTopic(topicId: string): TopicDecision[] {
+    return this.state()?.discussion?.decisions.filter((decision) => decision.topicId === topicId) ?? [];
+  }
+
+  actionsForTopic(topicId: string): ActionItem[] {
+    return this.state()?.discussion?.actions.filter((action) => action.topicId === topicId) ?? [];
+  }
+
+  formatClosedAt(value: string): string {
+    return new Date(value).toLocaleString('ru-RU', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+      timeZone: 'UTC',
+    });
+  }
+
   startEntryEdit(
     kind: 'comments' | 'decisions' | 'actions',
     entry: TopicComment | TopicDecision | ActionItem,

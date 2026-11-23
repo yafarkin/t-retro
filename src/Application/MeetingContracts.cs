@@ -18,7 +18,7 @@ public sealed record MeetingStateData(
     IReadOnlyList<MeetingColumn> Columns,
     IReadOnlyList<MeetingParticipant> Participants,
     IReadOnlyList<CardData> Cards,
-    IReadOnlySet<Guid> ReadyUserIds,
+    HashSet<Guid> ReadyUserIds,
     IReadOnlyList<MeetingGroup> Groups,
     IReadOnlyList<MeetingTopic> Topics,
     IReadOnlyList<VoteAllocation> Votes,
@@ -28,7 +28,9 @@ public sealed record MeetingStateData(
     IReadOnlyList<TopicComment> Comments,
     IReadOnlyList<TopicDecision> Decisions,
     IReadOnlyList<ActionItem> Actions,
-    IReadOnlyList<JiraExport> Exports);
+    IReadOnlyList<JiraExport> Exports,
+    MeetingCompletionTotals? Completion = null,
+    IReadOnlyList<MeetingTopicTotal>? TopicTotals = null);
 
 public sealed record MeetingIntegrations(bool Ai, bool Jira);
 
@@ -44,7 +46,8 @@ public sealed record MeetingSnapshot(
     MeetingReadiness? Readiness,
     MeetingTimer? Timer,
     MeetingIntegrations Integrations,
-    Guid CurrentUserId)
+    Guid CurrentUserId,
+    MeetingCompletionTotals? Completion = null)
 {
     public bool CanManage => Meeting.FacilitatorId == CurrentUserId;
 }
