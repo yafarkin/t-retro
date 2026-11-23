@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using Api.Contracts;
 using Application;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Api.Tests;
@@ -39,6 +40,7 @@ public sealed class FacilitatorElectionApiTests
             firstClient,
             meetingId,
             state => !state.Participants.Single(participant => participant.Id == first.Id).IsOnline);
+        await WaitForScheduledElectionAsync(factory, meetingId);
         factory.Time.Advance(TimeSpan.FromSeconds(59));
         var reconnected = await SignalRTestHelpers.ConnectAsync(factory, firstClient, "first", meetingId);
         factory.Time.Advance(TimeSpan.FromSeconds(3));
@@ -50,6 +52,7 @@ public sealed class FacilitatorElectionApiTests
             firstClient,
             meetingId,
             state => !state.Participants.Single(participant => participant.Id == first.Id).IsOnline);
+        await WaitForScheduledElectionAsync(factory, meetingId);
         factory.Time.Advance(TimeSpan.FromSeconds(61));
         using (var scope = factory.Services.CreateScope())
         {
@@ -70,6 +73,7 @@ public sealed class FacilitatorElectionApiTests
             firstClient,
             meetingId,
             state => !state.Participants.Single(participant => participant.Id == second.Id).IsOnline);
+        await WaitForScheduledElectionAsync(factory, meetingId);
         factory.Time.Advance(TimeSpan.FromSeconds(61));
         var vacant = await SignalRTestHelpers.WaitForStateAsync(
             firstClient,
@@ -84,5 +88,28 @@ public sealed class FacilitatorElectionApiTests
 
         await firstReturning.StopAsync();
         await secondReturning.StopAsync();
+    }
+
+    private static async Task WaitForScheduledElectionAsync(
+        TRetroWebApplicationFactory factory,
+        Guid meetingId)
+    {
+        await using var connection = new SqliteConnection($"Data Source={factory.DatabasePath}");
+        await connection.OpenAsync();
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT facilitator_election_deadline_utc FROM meetings WHERE id = @MeetingId;";
+            command.Parameters.AddWithValue("@MeetingId", meetingId.ToString());
+            var deadline = await command.ExecuteScalarAsync();
+            if (deadline is not null and not DBNull)
+            {
+                return;
+            }
+
+            await Task.Delay(100);
+        }
+
+        throw new TimeoutException("Expected facilitator election deadline was not saved.");
     }
 }

@@ -1,4 +1,5 @@
 import { expect, Page, test } from '@playwright/test';
+import { closeContextGracefully } from './helpers';
 
 async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
   await page.goto(`${baseURL}/login`);
@@ -57,5 +58,5 @@ test('M8 mock Jira export shares created status and locks the action in two cont
   await expect(first.getByRole('button', { name: 'Удалить задачу' })).toBeDisabled();
   await expect(second.getByRole('button', { name: 'Изменить задачу' })).toHaveCount(0);
 
-  await Promise.all([firstContext.close(), secondContext.close()]);
+  await Promise.all([firstContext, secondContext].map(closeContextGracefully));
 });

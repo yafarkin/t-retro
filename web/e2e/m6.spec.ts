@@ -1,4 +1,5 @@
 import { expect, Page, test } from '@playwright/test';
+import { closeContextGracefully } from './helpers';
 
 async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
   await page.goto(`${baseURL}/login`);
@@ -116,5 +117,5 @@ test('M6 ranked queue, shared navigation, decisions, comments and actions work i
   await expect(first.getByRole('heading', { name: 'Текущая тема: Тема A' })).toBeVisible();
   await expect(secondQueue.nth(0)).toContainText('Пропущена');
 
-  await Promise.all([firstContext.close(), secondContext.close()]);
+  await Promise.all([firstContext, secondContext].map(closeContextGracefully));
 });

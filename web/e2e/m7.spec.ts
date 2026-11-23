@@ -1,4 +1,5 @@
 import { expect, BrowserContext, Page, test } from '@playwright/test';
+import { closeContextGracefully } from './helpers';
 
 async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
   await page.goto(`${baseURL}/login`);
@@ -106,5 +107,5 @@ test('M7 timer countdown, expiration, sound coordination and reconnect work acro
   await expect(second.locator('.timer-section')).toContainText('Таймер не запущен.');
   await expect(second.getByText('Время вышло', { exact: true })).toHaveCount(1);
 
-  await Promise.all([firstContext.close(), secondContext.close()]);
+  await Promise.all([firstContext, secondContext].map(closeContextGracefully));
 });

@@ -10,10 +10,5 @@
   "/openapi": {
     "target": "http://localhost:5166",
     "secure": false
-  },
-  "/hubs": {
-    "target": "http://localhost:5166",
-    "secure": false,
-    "ws": true
   }
 }

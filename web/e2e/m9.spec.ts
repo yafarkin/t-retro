@@ -1,4 +1,5 @@
 import { expect, Page, test } from '@playwright/test';
+import { closeContextGracefully } from './helpers';
 
 async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
   await page.goto(`${baseURL}/login`);
@@ -109,5 +110,5 @@ test('M9 two participants close a meeting and download the same PDF from a perma
   expect(thirdResponse.status()).toBe(200);
   expect(firstPdf.equals(Buffer.from(await thirdResponse.body()))).toBe(true);
 
-  await Promise.all([firstContext.close(), secondContext.close(), thirdContext.close()]);
+  await Promise.all([firstContext, secondContext, thirdContext].map(closeContextGracefully));
 });

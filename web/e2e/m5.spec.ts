@@ -1,4 +1,5 @@
 import { expect, Page, test } from '@playwright/test';
+import { closeContextGracefully } from './helpers';
 
 async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
   await page.goto(`${baseURL}/login`);
@@ -99,5 +100,5 @@ test('M5 topics, live votes, late budget, open breakdown and exclusion work in i
   await expect(firstGroupTopic).toContainText('Всего голосов: 2');
   await expect(firstGroupTopic.getByLabel('Расклад голосов')).toContainText('Второй M5: 2');
 
-  await Promise.all([firstContext.close(), secondContext.close(), lateContext.close()]);
+  await Promise.all([firstContext, secondContext, lateContext].map(closeContextGracefully));
 });

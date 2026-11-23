@@ -1,4 +1,5 @@
 import { expect, Page, test } from '@playwright/test';
+import { closeContextGracefully } from './helpers';
 
 async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
   await page.goto(`${baseURL}/login`);
@@ -80,5 +81,5 @@ test('M3 private cards, readiness, late join, exclusion and phase advance synchr
   const revealedCard = firstColumn.locator('.card').filter({ has: first.getByText('Обновлённый секрет', { exact: true }) });
   await expect(revealedCard).not.toContainText('Второй M3');
 
-  await Promise.all([firstContext.close(), secondContext.close(), thirdContext.close()]);
+  await Promise.all([firstContext, secondContext, thirdContext].map(closeContextGracefully));
 });

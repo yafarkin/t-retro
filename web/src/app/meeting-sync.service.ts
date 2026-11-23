@@ -1,4 +1,4 @@
-import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
+import { computed, HostListener, inject, Injectable, isDevMode, OnDestroy, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { HubConnection, HubConnectionBuilder } from '@microsoft/signalr';
 import { MeetingState } from './meeting.models';
@@ -37,8 +37,11 @@ export class MeetingSyncService implements OnDestroy {
   async connect(meetingId: string): Promise<void> {
     this.meetingId = meetingId;
     this.revoked.set(false);
+    const hubUrl = isDevMode()
+      ? `${window.location.protocol}//${window.location.hostname}:5166/hubs/retro`
+      : '/hubs/retro';
     const connection = new HubConnectionBuilder()
-      .withUrl('/hubs/retro')
+      .withUrl(hubUrl)
       .withAutomaticReconnect()
       .build();
     this.connection = connection;
@@ -119,6 +122,15 @@ export class MeetingSyncService implements OnDestroy {
         this.refreshAgain = false;
         this.scheduleRefresh(this.meetingId);
       }
+    }
+  }
+
+  @HostListener('window:pagehide')
+  onPageHide(): void {
+    const connection = this.connection;
+    this.connection = null;
+    if (connection) {
+      void connection.stop();
     }
   }
 

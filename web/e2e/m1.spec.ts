@@ -1,4 +1,5 @@
 import { expect, Page, test } from '@playwright/test';
+import { closeContextGracefully } from './helpers';
 
 async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
   await page.goto(`${baseURL}/login`);
@@ -77,5 +78,5 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await expect(third.getByRole('heading', { name: 'Ретро M1', exact: true })).toBeVisible();
   await expect(third.getByText('Сотрудник В', { exact: false })).toBeVisible();
 
-  await Promise.all([firstContext.close(), secondContext.close(), thirdContext.close()]);
+  await Promise.all([firstContext, secondContext, thirdContext].map(closeContextGracefully));
 });

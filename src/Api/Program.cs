@@ -44,6 +44,16 @@ public sealed partial class Program
         builder.Services.AddExceptionHandler<ApiExceptionHandler>();
         builder.Services.AddProblemDetails();
         builder.Services.AddOpenApi();
+        if (isLocalEnvironment)
+        {
+            builder.Services.AddCors(options => options.AddPolicy(
+                "DevSpa",
+                policy => policy
+                    .WithOrigins("http://localhost:4200", "http://127.0.0.1:4200")
+                    .AllowAnyHeader()
+                    .AllowAnyMethod()
+                    .AllowCredentials()));
+        }
         builder.Services.AddSingleton(new SqliteConnectionFactory(connectionString, builder.Environment.ContentRootPath));
         builder.Services.AddScoped<IEmployeeRepository, SqliteEmployeeRepository>();
         builder.Services.AddScoped<ISchemaVersionReader, SqliteSchemaVersionReader>();
@@ -106,6 +116,10 @@ public sealed partial class Program
 
         var app = builder.Build();
         app.UseExceptionHandler();
+        if (isLocalEnvironment)
+        {
+            app.UseCors("DevSpa");
+        }
         app.UseAuthentication();
         app.UseAuthorization();
 
