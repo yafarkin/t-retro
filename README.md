@@ -85,7 +85,7 @@ Docker на текущей машине отсутствует. Dockerfile и do
 
 `tools/run` требует предварительного успешного `tools/build`, применяет миграции и одновременно запускает API на `http://127.0.0.1:5166` и Angular на `http://127.0.0.1:4200`. Нажатие Ctrl+C останавливает оба процесса. Рабочая база остаётся в `src/Api/data/t-retro.db`.
 
-Тот же `tools/build` запускается в GitHub Actions из [.github/workflows/ci.yml](.github/workflows/ci.yml) на `macos-latest` для каждого push и pull request. Workflow использует `actions/setup-dotnet`, `actions/setup-node` и отдельно устанавливает npm 12.1.0. Секреты и внешняя БД для текущих SQLite-проверок не нужны.
+Тот же `tools/build` запускается в GitHub Actions из [.github/workflows/ci.yml](.github/workflows/ci.yml) на `macos-latest` для каждого push и pull request. Workflow использует `actions/setup-dotnet`, `actions/setup-node` и отдельно устанавливает npm 12.1.0. Секреты и внешняя БД для текущих SQLite-проверок не нужны. [Первый успешный запуск](https://github.com/yafarkin/t-retro/actions/runs/45230426865) подтвердил все шаги сборки и тестов.
 
 ## Ручной запуск
 

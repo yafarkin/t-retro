@@ -143,7 +143,7 @@
 - [ ] **P3.1. Создать Dockerfile.** Настроить многостадийную сборку Angular и backend, копирование SPA в `wwwroot` и отдельную команду миграций.
 - [ ] **P3.2. Добавить манифесты Kubernetes.** Подготовить Deployment с `replicas=1` и `Recreate`, Service, пример ConfigMap и ссылки на существующие Secret по [§13](Retro_Spec.md#13-контейнер-эксплуатация-и-ci).
 - [ ] **P3.3. Настроить запуск миграций.** Добавить Job или initContainer с блокировкой миграций PostgreSQL и безопасным повтором.
-- [ ] **P3.4. Добавить GitHub Actions.** Для push и pull request запускать `tools/build` на macOS: чистую установку, сборку SPA, restore, build и test .NET, unit-тесты и E2E.
+- [x] **P3.4. Добавить GitHub Actions.** Для push и pull request запускать `tools/build` на macOS: чистую установку, сборку SPA, restore, build и test .NET, unit-тесты и E2E.
 - [ ] **P3.5. Описать runner и переменные.** Зафиксировать требования GitHub-hosted runner, переменную тестовой PostgreSQL и команды локального воспроизведения CI.
 - [ ] **P3.6. Добавить сборку контейнера в CI.** После реализации Dockerfile собирать образ с тегом SHA коммита, не заменяя проверки `tools/build`.
 
