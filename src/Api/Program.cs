@@ -52,6 +52,7 @@ public sealed partial class Program
         builder.Services.AddScoped<IGroupingRepository, SqliteGroupingRepository>();
         builder.Services.AddScoped<IVotingRepository, SqliteVotingRepository>();
         builder.Services.AddScoped<IDiscussionRepository, SqliteDiscussionRepository>();
+        builder.Services.AddScoped<IJiraExportRepository, SqliteJiraExportRepository>();
         builder.Services.AddScoped<ITemplateRepository, SqliteTemplateRepository>();
         builder.Services.AddScoped<DevLoginService>();
         builder.Services.AddScoped<MeetingAccessService>();
@@ -65,9 +66,15 @@ public sealed partial class Program
         builder.Services.AddScoped<MemberService>();
         builder.Services.AddScoped<FacilitatorElectionService>();
         builder.Services.AddScoped<TimerService>();
+        builder.Services.AddScoped<JiraExportService>();
         builder.Services.AddSingleton<IGroupSuggestionProvider>(
             new Infrastructure.Integrations.StubGroupSuggestionProvider(
                 builder.Configuration.GetValue<bool>("Integrations:Ai:Enabled")));
+        builder.Services.AddSingleton<IJiraIssueExporter>(
+            new Infrastructure.Integrations.MockJiraIssueExporter(
+                builder.Configuration.GetValue<bool>("Integrations:Jira:Enabled"),
+                builder.Configuration["Integrations:Jira:Outcome"] ?? "Created",
+                builder.Configuration.GetValue<int>("Integrations:Jira:DelayMs")));
         builder.Services.AddSingleton<IPresenceService, Infrastructure.Presence.InMemoryPresenceService>();
         builder.Services.AddSingleton<IMeetingTimer, Infrastructure.Timers.InMemoryMeetingTimer>();
         builder.Services.AddScoped<IMeetingNotifier, SignalRMeetingNotifier>();
@@ -110,6 +117,7 @@ public sealed partial class Program
         app.MapVotingEndpoints();
         app.MapDiscussionEndpoints();
         app.MapTimerEndpoints();
+        app.MapJiraExportEndpoints();
         app.MapTemplateEndpoints();
         app.MapMemberEndpoints();
         app.MapHub<RetroHub>("/hubs/retro");

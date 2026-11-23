@@ -147,7 +147,17 @@ public sealed record ActionItemResponse(
     string TopicId,
     string Text,
     string? AssigneeId,
-    string ExportStatus);
+    string ExportStatus,
+    string? ExternalRequestId,
+    string? IssueKey,
+    string? IssueUrl);
+
+public sealed record JiraExportResponse(
+    string Status,
+    string ExternalRequestId,
+    string? IssueKey,
+    string? IssueUrl,
+    int Version);
 
 public sealed record MeetingDiscussionResponse(
     string? CurrentTopicId,
@@ -156,7 +166,7 @@ public sealed record MeetingDiscussionResponse(
     IReadOnlyList<TopicDecisionResponse> Decisions,
     IReadOnlyList<ActionItemResponse> Actions);
 
-public sealed record MeetingIntegrationsResponse(bool Ai);
+public sealed record MeetingIntegrationsResponse(bool Ai, bool Jira);
 
 public sealed record MeetingReadinessResponse(int ReadyCount, int TotalCount, bool MyReady);
 

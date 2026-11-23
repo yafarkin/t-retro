@@ -218,10 +218,19 @@
                   <p>{{ action.text }}</p>
                   <p>Исполнитель: {{ actionAssigneeName(action.assigneeId) }}</p>
                   <p class="hint">{{ exportStatusLabel(action.exportStatus) }}</p>
+                  @if (action.issueKey; as issueKey) {
+                    <p><a [href]="action.issueUrl" target="_blank" rel="noopener noreferrer">{{ issueKey }}</a></p>
+                  }
+                  @if (action.externalRequestId; as externalRequestId) {
+                    <p class="hint">externalRequestId: {{ externalRequestId }}</p>
+                  }
+                  @if (canExport(action)) {
+                    <button tuiButton type="button" size="s" (click)="exportAction(action)" [disabled]="commandsBlocked()">Экспортировать в mock Jira</button>
+                  }
                   @if (meeting.canManage) {
                     <div class="inline">
-                      <button tuiButton type="button" size="s" appearance="secondary" (click)="startEntryEdit('actions', action)" [disabled]="commandsBlocked()">Изменить задачу</button>
-                      <button tuiButton type="button" size="s" appearance="secondary" (click)="deleteEntry('actions', action.id)" [disabled]="commandsBlocked()">Удалить задачу</button>
+                      <button tuiButton type="button" size="s" appearance="secondary" (click)="startEntryEdit('actions', action)" [disabled]="commandsBlocked() || isActionLocked(action)">Изменить задачу</button>
+                      <button tuiButton type="button" size="s" appearance="secondary" (click)="deleteEntry('actions', action.id)" [disabled]="commandsBlocked() || isActionLocked(action)">Удалить задачу</button>
                     </div>
                   }
                 }

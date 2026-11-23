@@ -1,5 +1,6 @@
 using Api.Contracts;
 using Application;
+using Domain;
 
 namespace Api;
 
@@ -74,7 +75,7 @@ public static class ApiMappings
                     snapshot.Timer.Phase.ToString(),
                     snapshot.Timer.EndsAtUtc,
                     snapshot.Timer.ServerNowUtc),
-            new MeetingIntegrationsResponse(snapshot.Integrations.Ai),
+            new MeetingIntegrationsResponse(snapshot.Integrations.Ai, snapshot.Integrations.Jira),
             snapshot.Readiness is null
                 ? null
                 : new MeetingReadinessResponse(
@@ -99,10 +100,19 @@ public static class ApiMappings
                 decision.Id.ToString(),
                 decision.TopicId.ToString(),
                 decision.Text)).ToArray(),
-            discussion.Actions.Select(action => new ActionItemResponse(
-                action.Id.ToString(),
-                action.TopicId.ToString(),
-                action.Text,
-                action.AssigneeId?.ToString(),
-                "notExported")).ToArray());
+            discussion.Actions.Select(action => ToResponse(action, discussion.Exports)).ToArray());
+
+    private static ActionItemResponse ToResponse(ActionItem action, IReadOnlyList<JiraExport> exports)
+    {
+        var export = exports.SingleOrDefault(item => item.ActionId == action.Id);
+        return new ActionItemResponse(
+            action.Id.ToString(),
+            action.TopicId.ToString(),
+            action.Text,
+            action.AssigneeId?.ToString(),
+            export?.Status.ToString().ToLowerInvariant() ?? "notExported",
+            export?.ExternalRequestId.ToString(),
+            export?.IssueKey,
+            export?.IssueUrl);
+    }
 }

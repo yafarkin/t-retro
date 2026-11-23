@@ -115,7 +115,18 @@ export interface ActionItem {
   topicId: string;
   text: string;
   assigneeId: string | null;
-  exportStatus: string;
+  exportStatus: 'notExported' | 'pending' | 'created' | 'rejected' | 'unknown' | 'unavailable';
+  externalRequestId: string | null;
+  issueKey: string | null;
+  issueUrl: string | null;
+}
+
+export interface JiraExportResult {
+  status: string;
+  externalRequestId: string;
+  issueKey: string | null;
+  issueUrl: string | null;
+  version: number;
 }
 
 export interface MeetingDiscussion {
@@ -161,7 +172,7 @@ export interface MeetingState extends MeetingSettingsPayload {
   voting?: MeetingVoting;
   discussion?: MeetingDiscussion;
   timer?: MeetingTimer;
-  integrations: { ai: boolean };
+  integrations: { ai: boolean; jira: boolean };
   readiness?: MeetingReadiness;
 }
 

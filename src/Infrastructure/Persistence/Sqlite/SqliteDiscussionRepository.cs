@@ -456,6 +456,12 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             return new MeetingCommandResult(MeetingCommandStatus.NotFound);
         }
 
+        if (kind == EntryKind.Action
+            && await IsActionLockedAsync(connection, transaction, meetingId, entryId))
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.ActionLocked);
+        }
+
         var currentAssignee = current.AssigneeId is null ? (Guid?)null : Guid.Parse(current.AssigneeId);
         if (kind == EntryKind.Action
             && assigneeId != currentAssignee
@@ -526,6 +532,12 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             return new MeetingCommandResult(MeetingCommandStatus.NotFound);
         }
 
+        if (kind == EntryKind.Action
+            && await IsActionLockedAsync(connection, transaction, meetingId, entryId))
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.ActionLocked);
+        }
+
         var table = TableName(kind);
         await connection.ExecuteAsync(
             $"DELETE FROM {table} WHERE meeting_id = @MeetingId AND id = @Id;",
@@ -554,6 +566,20 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             new { MeetingId = meetingId.ToString(), Id = entryId.ToString() },
             transaction);
     }
+
+    private static async Task<bool> IsActionLockedAsync(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        Guid meetingId,
+        Guid actionId) =>
+        await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT COUNT(*) FROM exports
+            WHERE meeting_id = @MeetingId AND action_id = @ActionId
+              AND status IN ('Pending', 'Created', 'Unknown');
+            """,
+            new { MeetingId = meetingId.ToString(), ActionId = actionId.ToString() },
+            transaction) == 1;
 
     private static async Task<bool> IsActiveAssigneeAsync(
         IDbConnection connection,

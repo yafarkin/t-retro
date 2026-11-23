@@ -27,9 +27,10 @@ public sealed record MeetingStateData(
     Guid? CurrentTopicId,
     IReadOnlyList<TopicComment> Comments,
     IReadOnlyList<TopicDecision> Decisions,
-    IReadOnlyList<ActionItem> Actions);
+    IReadOnlyList<ActionItem> Actions,
+    IReadOnlyList<JiraExport> Exports);
 
-public sealed record MeetingIntegrations(bool Ai);
+public sealed record MeetingIntegrations(bool Ai, bool Jira);
 
 public sealed record MeetingSnapshot(
     Meeting Meeting,

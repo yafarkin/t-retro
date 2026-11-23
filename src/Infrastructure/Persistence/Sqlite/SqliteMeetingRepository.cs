@@ -156,6 +156,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         IReadOnlyList<TopicComment> comments = [];
         IReadOnlyList<TopicDecision> decisions = [];
         IReadOnlyList<ActionItem> actions = [];
+        IReadOnlyList<JiraExport> exports = [];
         if (meetingRow.Phase == MeetingPhase.Discuss.ToString())
         {
             discussionQueue = (await connection.QueryAsync<DiscussionQueueRow>(
@@ -206,6 +207,22 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                     row.Text,
                     row.AssigneeId is null ? null : Guid.Parse(row.AssigneeId)))
                 .ToArray();
+            exports = (await connection.QueryAsync<ExportRow>(
+                """
+                SELECT meeting_id AS MeetingId, action_id AS ActionId,
+                       external_request_id AS ExternalRequestId, status AS Status,
+                       issue_key AS IssueKey, issue_url AS IssueUrl
+                FROM exports WHERE meeting_id = @MeetingId ORDER BY action_id;
+                """,
+                new { MeetingId = meetingId.ToString() }))
+                .Select(row => new JiraExport(
+                    Guid.Parse(row.MeetingId),
+                    Guid.Parse(row.ActionId),
+                    Guid.Parse(row.ExternalRequestId),
+                    Enum.Parse<JiraExportStatus>(row.Status),
+                    row.IssueKey,
+                    row.IssueUrl))
+                .ToArray();
         }
 
         return new MeetingStateData(
@@ -222,7 +239,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             currentTopicId,
             comments,
             decisions,
-            actions);
+            actions,
+            exports);
     }
 
     public async Task<MeetingMember?> FindMemberAsync(
@@ -1599,6 +1617,16 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         public required string TopicId { get; init; }
         public required string Text { get; init; }
         public string? AssigneeId { get; init; }
+    }
+
+    private sealed class ExportRow
+    {
+        public required string MeetingId { get; init; }
+        public required string ActionId { get; init; }
+        public required string ExternalRequestId { get; init; }
+        public required string Status { get; init; }
+        public string? IssueKey { get; init; }
+        public string? IssueUrl { get; init; }
     }
 
     private sealed class CommandReplayRow

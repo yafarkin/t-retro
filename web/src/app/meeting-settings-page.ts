@@ -723,8 +723,37 @@ export class MeetingSettingsPage {
       ?? 'Участник недоступен';
   }
 
+  isActionLocked(action: ActionItem): boolean {
+    return action.exportStatus === 'pending'
+      || action.exportStatus === 'created'
+      || action.exportStatus === 'unknown';
+  }
+
+  canExport(action: ActionItem): boolean {
+    const current = this.state();
+    return !!current?.canManage && current.integrations.jira && action.exportStatus === 'notExported';
+  }
+
+  exportAction(action: ActionItem): void {
+    if (!this.canExport(action) || this.commandsBlocked()) {
+      return;
+    }
+    this.executeDiscussionCommand(
+      this.meetings.exportAction(this.meetingId, action.id),
+      'Mock Jira обработал запрос экспорта.',
+    );
+  }
+
   exportStatusLabel(status: string): string {
-    return status === 'notExported' ? 'Jira: не экспортировано' : status;
+    const labels: Record<string, string> = {
+      notExported: 'Jira: не экспортировано',
+      pending: 'Mock Jira: отправка…',
+      created: 'Mock Jira: создано',
+      rejected: 'Mock Jira: подтверждён отказ',
+      unknown: 'Mock Jira: требуется сверка',
+      unavailable: 'Mock Jira: недоступен',
+    };
+    return labels[status] ?? status;
   }
 
   private executeDiscussionCommand(

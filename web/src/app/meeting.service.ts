@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import {
   GroupProposal,
   Invite,
+  JiraExportResult,
   MeetingSettingsPayload,
   MeetingState,
   MeetingSummary,
@@ -175,6 +176,13 @@ export class MeetingService {
 
   deleteAction(meetingId: string, actionId: string, expectedVersion: number): Observable<{ version: number }> {
     return this.deleteDiscussionEntry(meetingId, 'actions', actionId, expectedVersion);
+  }
+
+  exportAction(meetingId: string, actionId: string): Observable<JiraExportResult> {
+    return this.http.post<JiraExportResult>(
+      `/api/meetings/${meetingId}/actions/${actionId}/export`,
+      {},
+    );
   }
 
   startTimer(meetingId: string, seconds: number): Observable<MeetingState['timer']> {

@@ -6,6 +6,7 @@ public sealed class MeetingAccessService(
     IMeetingRepository meetings,
     IPresenceService presence,
     IGroupSuggestionProvider groupSuggestions,
+    IJiraIssueExporter jiraExporter,
     IMeetingTimer timer,
     TimeProvider timeProvider)
 {
@@ -63,7 +64,8 @@ public sealed class MeetingAccessService(
                 state.CurrentTopicId,
                 state.Comments,
                 state.Decisions,
-                state.Actions)
+                state.Actions,
+                state.Exports)
             : null;
         var currentTimer = state.Meeting.Phase is MeetingPhase.Collect or MeetingPhase.Group or MeetingPhase.Vote or MeetingPhase.Discuss
             ? timer.Get(meetingId, timeProvider.GetUtcNow())
@@ -84,7 +86,7 @@ public sealed class MeetingAccessService(
             discussion,
             readiness,
             currentTimer,
-            new MeetingIntegrations(groupSuggestions.IsAvailable),
+            new MeetingIntegrations(groupSuggestions.IsAvailable, jiraExporter.IsAvailable),
             userId);
     }
 

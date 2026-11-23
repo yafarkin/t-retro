@@ -99,4 +99,12 @@ describe('MeetingService', () => {
     expect(request.request.body.operationId).toMatch(/[0-9a-f-]{36}/);
     request.flush({ runId: 'run-id', phase: 'Collect', endsAtUtc: '2026-11-23T12:01:00Z', serverNowUtc: '2026-11-23T12:00:00Z' });
   });
+
+  it('exports an action through the mock Jira endpoint', () => {
+    service.exportAction('meeting-id', 'action-id').subscribe();
+
+    const request = http.expectOne('/api/meetings/meeting-id/actions/action-id/export');
+    expect(request.request.method).toBe('POST');
+    request.flush({ status: 'created', externalRequestId: 'request-id', issueKey: 'MOCK-1', issueUrl: null, version: 8 });
+  });
 });

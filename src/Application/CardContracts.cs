@@ -27,6 +27,7 @@ public enum MeetingCommandStatus
     OperationConflict,
     InvalidAssignee,
     InvalidNavigation,
+    ActionLocked,
 }
 
 public sealed record MeetingCommandResult(

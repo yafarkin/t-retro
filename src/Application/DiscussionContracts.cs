@@ -7,7 +7,8 @@ public sealed record MeetingDiscussion(
     Guid? CurrentTopicId,
     IReadOnlyList<TopicComment> Comments,
     IReadOnlyList<TopicDecision> Decisions,
-    IReadOnlyList<ActionItem> Actions);
+    IReadOnlyList<ActionItem> Actions,
+    IReadOnlyList<JiraExport> Exports);
 
 public interface IDiscussionRepository
 {

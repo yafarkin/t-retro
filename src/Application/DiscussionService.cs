@@ -271,6 +271,8 @@ public sealed class DiscussionService(
                 throw new DomainValidationException("InvalidAssignee", "Исполнитель должен быть действующим участником встречи.");
             case MeetingCommandStatus.InvalidNavigation:
                 throw new ConflictException("InvalidDiscussionNavigation", "Команду «Далее» можно выполнить только для текущей темы.");
+            case MeetingCommandStatus.ActionLocked:
+                throw new ConflictException("ActionLocked", "Задачу нельзя изменить или удалить во время экспорта, после создания в Jira или до сверки неизвестного исхода.");
         }
 
         if (!result.IsReplay)
