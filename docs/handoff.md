@@ -2,7 +2,7 @@
 
 Файл содержит актуальный контекст для продолжения работы в новой сессии. Его нужно полностью обновлять по запросу пользователя `сохрани сессию` или `bfe`, а также при любом запросе сохранить контекст перед сменой сессии.
 
-Обновлено 23 ноября 2026 года после реализации M9.
+Обновлено 23 ноября 2026 года по запросу `bfe` после детализации M10.
 
 ## Как обновлять файл
 
@@ -12,90 +12,114 @@
 
 ## Текущее состояние
 
-Этапы с M0 по M9 завершены и отмечены в [плане](tasks.md). Локальный MVP теперь проходит полный маршрут от создания встречи до `Closed` и сохранённого PDF. Следующий этап — M10: итоговая проверка MVP, документация приёмки и повторный разбор frontend-зависимостей.
+- Этапы M0–M9 завершены. Локальный MVP проходит полную встречу от создания до `Closed` и сохранённого PDF.
+- macOS-скрипты и GitHub Actions реализованы, P3.4 отмечена выполненной. В репозитории только ветка `master`, она отслеживает `origin/master` в [GitHub](https://github.com/yafarkin/t-retro/tree/master).
+- Последний опубликованный коммит на момент снимка — `38819c6 Record successful GitHub Actions run`. [CI для этого SHA](https://github.com/yafarkin/t-retro/actions/runs/45231230315) завершён успешно.
+- Текущая работа ограничивается детализацией [M10 в плане](tasks.md#этап-m10-проверка-mvp) и этим handoff. Реализация M10 ещё не начата, новых непроверенных функциональных изменений нет.
+- В `web/angular.json` сохранено `cli.analytics=false`: Angular CLI не должен спрашивать разрешение на телеметрию в интерактивном терминале.
+- Домашний путь пользователя удалён из README. Текущие документы не должны содержать локальные домашние пути, секреты или токены. Старая публичная Git-история не переписывалась.
 
-Функциональный коммит M9 — `13375c8 Implement M9 meeting completion and PDF reports`. Вся история находится в [GitHub](https://github.com/yafarkin/t-retro/tree/master). Осталась единственная `master`, отслеживающая `origin/master`. Скрипты и workflow опубликованы коммитами `1b101d9` и `07b5736`. Коммит `f9d8654` удалил домашний путь пользователя из README; проверка `/Users/` по отслеживаемым файлам больше ничего не находит. Старая публичная история Git не переписывалась.
+## Что уже сделано
 
-Docker отсутствует и для проверок не используется. .NET SDK 10.0.404 находится в `/usr/local/share/dotnet`, настройка `PATH` описана в [README](../README.md#подготовка-инструментов).
+### Функциональность M0–M9
 
-## Что сделано в M9
+- Основа .NET 10/Angular/SQLite, dev-личность, встречи, шаблоны, приглашения и права.
+- SignalR, присутствие, исключение, передача роли и перевыборы с рестартом и проверкой 59/61 секунды.
+- Карточки, серверная приватность, готовность и ручные переходы фаз.
+- Группировка и локальная заглушка ИИ без сети.
+- Темы, бюджеты, позднее вступление с полным бюджетом, открытое и анонимное голосование.
+- Обсуждение с общей очередью, отдельные решения и комментарии, задачи и исторические назначения.
+- Таймер только в памяти, reconnect и один звук на профиль. Состояние, `runId`, срок и дедупликация таймера не хранятся в БД.
+- Mock Jira с идемпотентным `externalRequestId`, исходами `Created`, `Rejected`, `Unknown`, `Unavailable` и портом сверки.
+- Транзакционное завершение, физическое удаление приватных связей, сохранённые итоги, PDF и Closed UI.
 
-- Добавлена миграция [0009_completion.sql](../src/Infrastructure/Persistence/Migrations/SQLite/0009_completion.sql): `meeting_totals`, `topic_totals`, `reports`. На встречу создаётся один набор итогов и один PDF.
-- [MeetingCompletionContracts](../src/Application/MeetingCompletionContracts.cs) содержит модели итогов, порты и создание безопасного снимка. В нём есть колонки, участники, карточки, группы, темы, очередь, решения, комментарии, задачи, назначения и разрешённые открытые связи.
-- [SqliteMeetingCompletionRepository](../src/Infrastructure/Persistence/Sqlite/SqliteMeetingCompletionRepository.cs) выполняет согласованное чтение, генерацию PDF, сохранение итогов и байтов, удаление приватных связей, очистку готовности, закрытие приглашения и переход в `Closed` в одной immediate-транзакции SQLite.
-- При `anonymousCards=true` удаляются все `card_authors` и записи `command_deduplication` типа `CreateCard`. При `anonymousVotes=true` удаляются `votes` и `personal_ballots`, а суммы остаются в итогах. Флаги независимы.
-- Ошибка PDF откатывает транзакцию и оставляет `Discuss`. Повтор исходной команды после успеха возвращает прежнюю версию и тот же PDF. Другое тело или тип с тем же `operationId` даёт конфликт.
-- [MeetingBoardService](../src/Application/MeetingBoardService.cs) использует реальное завершение вместо `CompletionUnavailable` и отменяет таймер только после commit. Таймер и его команды по-прежнему не сохраняются в БД.
-- [SqliteMeetingRepository](../src/Infrastructure/Persistence/Sqlite/SqliteMeetingRepository.cs) в `Closed` читает сохранённый payload из `meeting_totals`, а не текущие карточки и голоса. Актуальные статусы Jira отдельно читаются из `exports`; поздний экспорт не меняет PDF.
-- [MeetingAccessService](../src/Application/MeetingAccessService.cs) возвращает темы и обсуждение в `Closed`, но не возвращает готовность, личный бюджет или таймер.
-- [MeetingReportService](../src/Application/MeetingReportService.cs) и `GET /api/meetings/{id}/report.pdf` проверяют личность и членство при каждом GET. Ответ имеет `application/pdf` и `Cache-Control: private, no-store`; байты одинаковы для допущенных участников.
-- [MeetingSettingsPage](../web/src/app/meeting-settings-page.html) имеет отдельное read-only представление `Closed` с итогами, рейтингом, открытым раскладом, решениями, комментариями, задачами и ссылкой на PDF. Команд редактирования там нет, mock-экспорт Jira остаётся доступным фасилитатору.
+### Завершение и PDF
 
-## PDF и лицензии
+- Миграция [0009_completion.sql](../src/Infrastructure/Persistence/Migrations/SQLite/0009_completion.sql) создаёт `meeting_totals`, `topic_totals` и `reports`.
+- [MeetingCompletionContracts](../src/Application/MeetingCompletionContracts.cs) формирует безопасный снимок итогов.
+- [SqliteMeetingCompletionRepository](../src/Infrastructure/Persistence/Sqlite/SqliteMeetingCompletionRepository.cs) в одной immediate-транзакции читает состояние, создаёт итоги и PDF, удаляет связи, очищает готовность, закрывает приглашение и выставляет `Closed`.
+- При `anonymousCards=true` удаляются `card_authors` и `CreateCard`-дедупликация. При `anonymousVotes=true` удаляются `votes` и `personal_ballots`. Флаги независимы.
+- Ошибка PDF откатывает всё и оставляет `Discuss`. Повтор исходной команды возвращает тот же отчёт, другое тело/тип с тем же `operationId` даёт 409.
+- [SqliteMeetingRepository](../src/Infrastructure/Persistence/Sqlite/SqliteMeetingRepository.cs) в `Closed` читает итоги, а не текущие карточки и голоса. Текущие статусы Jira отдельно читаются из `exports`, PDF не перегенерируется.
+- [PdfSharpMeetingReportGenerator](../src/Infrastructure/Reporting/PdfSharpMeetingReportGenerator.cs) использует PDFsharp 6.2.4 с MIT-лицензией и встроенные DejaVu Sans 2.37. Кириллица, переносы и многостраничные отчёты проверены через PdfPig.
+- `GET /api/meetings/{id}/report.pdf` проверяет личность и членство при каждом запросе и возвращает одинаковые байты с `application/pdf` и `private, no-store`.
 
-- Выбран [PDFsharp 6.2.4](https://www.nuget.org/packages/PDFsharp/6.2.4): цель `net10.0`, локальная генерация без сети, MIT-лицензия. Версия 6.5.0 не используется, поскольку перешла на AGPL/коммерческую лицензию.
-- Транзитивный `System.Security.Cryptography.Pkcs` обновлён до 10.0.15 прямой ссылкой, предупреждения NU1902/NU1903 устранены.
-- [PdfSharpMeetingReportGenerator](../src/Infrastructure/Reporting/PdfSharpMeetingReportGenerator.cs) формирует русский отчёт с итогами, колонками, карточками, группами, рейтингом включая нули, статусами, решениями, комментариями, задачами и открытыми сведениями по флагам. Длинные строки переносятся, страницы нумеруются, метаданные не содержат авторства участников.
-- [EmbeddedFontResolver](../src/Infrastructure/Reporting/EmbeddedFontResolver.cs) использует встроенные DejaVu Sans Regular/Bold 2.37 с кириллицей, не зависящие от ОС.
-- Лицензии: [PDFsharp](../src/Infrastructure/Reporting/PDFsharp-LICENSE.txt), [DejaVu](../src/Infrastructure/Reporting/Fonts/DejaVu-LICENSE.txt). Выбор и ссылки зафиксированы в [README](../README.md#завершение-и-pdf).
+### Инструменты и CI
 
-## Инструменты macOS и CI
+- [tools/build](../tools/build) проверяет macOS и точные версии .NET SDK, Node.js и npm, затем выполняет чистую сборку и все проверки. Совместим с Bash 3.2, Docker не нужен.
+- [tools/run](../tools/run) применяет миграции, запускает API и Angular, ждёт Ctrl+C и останавливает оба процесса. Проверен через псевдотерминал: URL поднялись, порты после Ctrl+C освобождены.
+- [web/playwright.config.ts](../web/playwright.config.ts) использует отдельную SQLite `.tools/e2e/t-retro.db`, не рабочую базу.
+- [.github/workflows/ci.yml](../.github/workflows/ci.yml) запускает тот же `tools/build` на `macos-latest` для push и pull request. Точная npm устанавливается отдельным шагом.
+- Первый CI выявил npm 11.12.1 вместо 12.1.0; исправление проверено зелёными run `45230426865` и `45231230315`.
 
-- [tools/build](../tools/build) проверяет macOS и точные версии .NET, Node и npm, затем выполняет чистую сборку и все тесты. Скрипт совместим с Bash 3.2 и не требует Docker.
-- [tools/run](../tools/run) применяет миграции, запускает API и Angular, ждёт Ctrl+C и останавливает оба процесса. `NG_CLI_ANALYTICS=false` исключает интерактивный вопрос при запуске в TTY.
-- [web/playwright.config.ts](../web/playwright.config.ts) использует отдельную SQLite `.tools/e2e/t-retro.db`, поэтому E2E больше не изменяют рабочую `src/Api/data/t-retro.db`.
-- [.github/workflows/ci.yml](../.github/workflows/ci.yml) запускает тот же `tools/build` на `macos-latest` для push и pull request. Первый run выявил npm 11.12.1 вместо 12.1.0; после добавления точной установки npm [run 45230426865](https://github.com/yafarkin/t-retro/actions/runs/45230426865) для `f9d8654` прошёл успешно за 2m52s. P3.4 отмечена выполненной.
-- Локально `tools/build` прошёл полностью: 85 backend-тестов, 11 unit-тестов и 9 E2E. `tools/run` проверен через псевдотерминал: оба URL стали доступны, Ctrl+C остановил серверы и освободил порты.
-- Документация переведена с GitLab CI на GitHub Actions. Сборка Docker-образа выделена в отдельную открытую задачу P3.6.
+## Результаты последних проверок
 
-## Проверки
+Полный локальный `./tools/build` прошёл:
 
-Стандартные команды описаны в [README](../README.md#сборка-и-тесты). Последний полный регресс прошёл:
+- Backend без предупреждений компилятора: 85 тестов — Domain 25, Application 8, Infrastructure 7, API 45.
+- Frontend: production build и 11 unit-тестов.
+- Все девять E2E M1–M9 на реальных SPA, API, SQLite и WebSocket.
+- `tools/run` проверен запуском обоих серверов и настоящим терминальным Ctrl+C.
 
-- `dotnet restore`, `dotnet build` без предупреждений и `dotnet test`: 85 backend-тестов — Domain 25, Application 8, Infrastructure 7, API 45.
-- `npm ci`, production build без предупреждений Angular и 11 unit-тестов frontend.
-- Все девять E2E [M1](../web/e2e/m1.spec.ts)–[M9](../web/e2e/m9.spec.ts) прошли на реальных SPA, API, SQLite и WebSocket.
-- [CompletionApiTests](../tests/Api.Tests/CompletionApiTests.cs) проверяют четыре сочетания флагов, итоги, физическое удаление, PDF и его текст через PdfPig, нулевые темы, решения, комментарии, задачи, откат ошибки, повторы, конфликт операции, пустое ретро, многостраничную кириллицу и доступ из новой сессии.
-- [PdfSharpMeetingReportGeneratorTests](../tests/Infrastructure.Tests/PdfSharpMeetingReportGeneratorTests.cs) проверяют пустой PDF, сигнатуру и JSON round-trip сохранённого состояния.
-- [M9 E2E](../web/e2e/m9.spec.ts) проходит встречу двумя участниками до `Closed` и сравнивает байты PDF в двух контекстах и новой сессии участника.
+Ключевые проверки:
 
-`npm audit` по-прежнему сообщает о четырёх предупреждениях в optional-цепочке `ng-morph` и `minimatch`: 2 moderate и 2 high. Override не применялся, задача M10.8 открыта.
+- [CompletionApiTests](../tests/Api.Tests/CompletionApiTests.cs): четыре сочетания приватности, сохранённые строки, физическое удаление, итоги, откат PDF, повторы, пустое ретро, кириллица, многостраничный PDF и доступ из новой сессии.
+- [PdfSharpMeetingReportGeneratorTests](../tests/Infrastructure.Tests/PdfSharpMeetingReportGeneratorTests.cs): пустой PDF, сигнатура и JSON round-trip.
+- [M9 E2E](../web/e2e/m9.spec.ts): два контекста до `Closed`, одинаковые байты PDF в двух контекстах и новой сессии.
+- [GitHub Actions run 45231230315](https://github.com/yafarkin/t-retro/actions/runs/45231230315): успешный полный цикл для `38819c6`.
+
+`npm audit` по-прежнему сообщает 4 предупреждения в optional-цепочке `ng-morph`/`minimatch`: 2 moderate и 2 high. Override не применялся. Исследование и решение входят в M10.8.
 
 ## Принятые решения и ограничения
 
-- Локальный MVP использует SQLite. PostgreSQL остаётся на P1; SQLite-проверки не заменяют PostgreSQL-приёмку.
-- Приложение рассчитано на один процесс/pod. Таймер, `runId`, срок и дедупликация команд таймера хранятся только в памяти и не попадают в БД.
+- Локальный MVP использует SQLite. PostgreSQL остаётся на P1; тесты SQLite не подтверждают PostgreSQL-специфичные требования.
+- Приложение рассчитано на один процесс/pod. Горизонтальное масштабирование не заявляется.
+- Таймер только в памяти. После рестарта таймер и история его команд отсутствуют.
 - Решения и комментарии раздельны. Поздний участник `Vote` получает полный текущий бюджет без пересчёта `N`.
-- Внутренний ИИ и Jira остаются локальными mock-адаптерами без сети. Корпоративные контракты TWork, Jira, ИИ и Sage не предоставлены; URL, заголовки, проекты и аутентификацию нельзя выдумывать.
-- Скрытые тексты, авторство и технические связи нельзя возвращать в HTTP, SignalR, HTML, PDF или логах. В анонимном сохранённом payload авторство и индивидуальные голоса отсутствуют.
-- Коммиты выполняются только по явной просьбе пользователя.
+- Внутренний ИИ и Jira — только локальные mock-адаптеры без сети. Корпоративные контракты TWork, Jira, ИИ и Sage не предоставлены; URL, заголовки, проекты и аутентификацию нельзя выдумывать.
+- Скрытые тексты, авторство и технические связи нельзя возвращать в HTTP, SignalR, HTML, PDF или логах.
+- Docker на текущей машине отсутствует и не используется.
+- Коммиты выполняются по явной просьбе пользователя. Сейчас пользователь явно запросил детализировать M10, выполнить `bfe` и всё отправить.
 
 ## Незавершённая работа
 
-M9 завершён, проверен и опубликован в `origin/master`. Скрипты macOS проверены локально, GitHub Actions прошёл удалённо, P3.4 выполнена. Остаётся отправить этот обновлённый снимок документации. Следующий функциональный этап M10 ещё не начат.
+Реализация M10 не начата. Все M10.1–M10.8 остаются неотмеченными. Подробный план находится в [docs/tasks.md](tasks.md#этап-m10-проверка-mvp) и включает:
 
-В M10 нужно:
+1. M10.1 — инвентаризацию и дополнение Domain/Application-правил без Angular и SQLite: фазы, тексты, группы, бюджет, очередь, приватность и границы.
+2. M10.2 — матрицу приватности на необработанных JSON, SignalR, SQLite, payload и фактических PDF, включая исключённых и физическое удаление.
+3. M10.3 — миграции 0001–0009, ограничения, транзакции, версии, гонки, идемпотентность, перевыборы и рестарт на реальной SQLite.
+4. M10.4 — объединённый маршрут нескольких сотрудников до PDF с reconnect, двумя вкладками, одним сигналом и новой сессией отчёта.
+5. M10.5 — доказательную матрицу сценариев 01–15, 17 и локальной части 18. Для 16 проверить только локальный рестарт, reconnect и pipeline; pod/PostgreSQL/deployment оставить в P4.2. Базовую встречу с настроенным TWork отложить в P2/P4.
+6. M10.6 — локальный `tools/build` и зелёный CI на одном итоговом SHA, актуальные числа тестов и очистка только тестовых артефактов.
+7. M10.7 — документацию запуска, ограничений, приёмочной матрицы и отложенных P1–P4 без секретов и домашних путей.
+8. M10.8 — разбор advisory и дерева `ng-morph`/`minimatch`, минимальное совместимое исправление при наличии либо документированное ограничение без ложного заявления об устранении.
 
-1. Сверить существующее покрытие с M10.1–M10.3 и дополнить только реальные пробелы Domain, приватности и SQLite.
-2. Выполнить M10.4–M10.5: полный маршрут и применимые сценарии 01–15, 17 и локальную часть 18 из [§14](Retro_Spec.md#14-приёмка-и-самопроверка-постановки). Для 16 после рестарта таймер должен отсутствовать; PostgreSQL-проверки остаются открытыми.
-3. Выполнить чистую сборку M10.6, актуализировать результаты и документацию M10.7.
-4. Повторно разобрать M10.8 и предупреждения `npm audit` без непроверенного мажорного override.
+Рекомендуемый порядок продолжения: M10.1 → M10.2 → M10.3 → M10.4 → M10.5 → M10.6 → M10.7. M10.8 можно исследовать параллельно, но закрыть до завершения этапа. Не отмечать задачи только потому, что похожие тесты уже есть: сначала сверить ожидаемый результат со спецификацией.
 
-Внешних блокировок для M10 нет. P1–P4 по-прежнему требуют внешнюю PostgreSQL, корпоративные контракты и соответствующую инфраструктуру.
+Внешних блокировок для начала M10 нет. P1–P4 требуют внешнюю PostgreSQL, корпоративные контракты и соответствующую инфраструктуру и не входят в локальную приёмку.
+
+## Состояние документации
+
+При сохранении проверены [спецификация](Retro_Spec.md), [план](tasks.md), [README](../README.md) и [AGENTS.md](../AGENTS.md):
+
+- SQLite и отложенный PostgreSQL описаны согласованно.
+- Таймер везде только в памяти, решения и комментарии разделены, бюджет позднего участника не пересчитывается.
+- CI везде GitHub Actions; сборка Docker-образа вынесена в P3.6.
+- M10 детализирован, M0–M9 и P3.4 отмечены выполненными, остальные задачи не отмечены преждевременно.
+- Открытых противоречий, требующих нового решения пользователя, нет.
 
 ## Файлы для новой сессии
 
-- [docs/tasks.md](tasks.md) — статусы M0–M10 и последующих этапов.
-- [AGENTS.md](../AGENTS.md) — обязательные правила разработки и сохранения контекста.
-- [docs/Retro_Spec.md](Retro_Spec.md) — исходные требования, особенно §9 и §14.
-- [README.md](../README.md) — запуск, версии, PDF и результаты проверок.
-- [src/Application/MeetingCompletionContracts.cs](../src/Application/MeetingCompletionContracts.cs) — модели и безопасная проекция итогов.
-- [src/Infrastructure/Persistence/Sqlite/SqliteMeetingCompletionRepository.cs](../src/Infrastructure/Persistence/Sqlite/SqliteMeetingCompletionRepository.cs) — транзакция завершения.
-- [src/Infrastructure/Reporting/PdfSharpMeetingReportGenerator.cs](../src/Infrastructure/Reporting/PdfSharpMeetingReportGenerator.cs) — генерация PDF.
-- [src/Api/MeetingEndpoints.cs](../src/Api/MeetingEndpoints.cs) — постоянный маршрут отчёта.
-- [web/src/app/meeting-settings-page.html](../web/src/app/meeting-settings-page.html) — Closed UI.
-- [tests/Api.Tests/CompletionApiTests.cs](../tests/Api.Tests/CompletionApiTests.cs) — интеграционные проверки M9.
-- [web/e2e/m9.spec.ts](../web/e2e/m9.spec.ts) — полный браузерный маршрут.
-- [docs/handoff.md](handoff.md) — этот снимок.
+- [docs/handoff.md](handoff.md) — этот снимок, читать первым.
+- [AGENTS.md](../AGENTS.md) — обязательные правила разработки и bfe.
+- [docs/tasks.md](tasks.md#этап-m10-проверка-mvp) — подробный план M10 и статусы P1–P4.
+- [docs/Retro_Spec.md](Retro_Spec.md#14-приёмка-и-самопроверка-постановки) — исходные приёмочные сценарии.
+- [README.md](../README.md) — версии, конфигурация, команды и результаты.
+- [tools/build](../tools/build), [tools/run](../tools/run) — стандартные локальные действия macOS.
+- [.github/workflows/ci.yml](../.github/workflows/ci.yml) — удалённый цикл.
+- [tests/Domain.Tests](../tests/Domain.Tests), [tests/Application.Tests](../tests/Application.Tests), [tests/Infrastructure.Tests](../tests/Infrastructure.Tests), [tests/Api.Tests](../tests/Api.Tests) — существующая основа M10.1–M10.3.
+- [web/e2e](../web/e2e) — девять существующих браузерных сценариев.
+- [tests/Api.Tests/CompletionApiTests.cs](../tests/Api.Tests/CompletionApiTests.cs) — основа приватности, итогов и PDF.
+- [web/playwright.config.ts](../web/playwright.config.ts) — изолированная тестовая SQLite.
 
-В начале новой сессии нужно прочитать handoff и AGENTS, затем сверить снимок с фактическими файлами и `git status`.
+В начале новой сессии нужно прочитать handoff и AGENTS, затем проверить `git status`, актуальный SHA и последний CI. Не считать снимок заменой проверки фактического состояния.
