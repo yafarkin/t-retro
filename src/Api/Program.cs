@@ -53,6 +53,7 @@ public sealed partial class Program
         builder.Services.AddScoped<DevLoginService>();
         builder.Services.AddScoped<MeetingAccessService>();
         builder.Services.AddScoped<MeetingService>();
+        builder.Services.AddScoped<MeetingBoardService>();
         builder.Services.AddScoped<TemplateService>();
         builder.Services.AddScoped<InvitationService>();
         builder.Services.AddScoped<MemberService>();
@@ -92,6 +93,7 @@ public sealed partial class Program
         }
 
         app.MapMeetingEndpoints();
+        app.MapBoardEndpoints();
         app.MapTemplateEndpoints();
         app.MapMemberEndpoints();
         app.MapHub<RetroHub>("/hubs/retro");

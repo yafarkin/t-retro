@@ -43,6 +43,23 @@ export interface Participant {
   isOnline: boolean;
 }
 
+export interface MeetingCard {
+  id: string;
+  columnId: string;
+  text?: string;
+  authorId?: string;
+  authorDisplayName?: string;
+  isMine: boolean;
+  isHidden: boolean;
+  version: number;
+}
+
+export interface MeetingReadiness {
+  readyCount: number;
+  totalCount: number;
+  myReady: boolean;
+}
+
 export interface MeetingState extends MeetingSettingsPayload {
   serverNowUtc: string;
   id: string;
@@ -53,6 +70,8 @@ export interface MeetingState extends MeetingSettingsPayload {
   facilitatorId: string | null;
   columns: Column[];
   participants: Participant[];
+  cards: MeetingCard[];
+  readiness?: MeetingReadiness;
 }
 
 export interface Invite {

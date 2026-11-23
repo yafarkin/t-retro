@@ -84,4 +84,43 @@ public interface IMeetingRepository
         Guid? newFacilitatorId,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken);
+
+    Task<MeetingCommandResult> CreateCardAsync(
+        Card card,
+        Guid authorId,
+        Guid operationId,
+        string fingerprint,
+        CancellationToken cancellationToken);
+
+    Task<MeetingCommandResult> UpdateCardAsync(
+        Card card,
+        Guid authorId,
+        int expectedCardVersion,
+        CancellationToken cancellationToken);
+
+    Task<MeetingCommandResult> DeleteCardAsync(
+        Guid meetingId,
+        Guid cardId,
+        Guid authorId,
+        int expectedCardVersion,
+        CancellationToken cancellationToken);
+
+    Task<MeetingCommandResult> SetReadinessAsync(
+        Guid meetingId,
+        Guid userId,
+        MeetingPhase phase,
+        bool ready,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken);
+
+    Task<MeetingCommandResult> AdvanceAsync(
+        Guid meetingId,
+        Guid facilitatorId,
+        MeetingPhase fromPhase,
+        MeetingPhase toPhase,
+        int expectedVersion,
+        Guid operationId,
+        string fingerprint,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken);
 }

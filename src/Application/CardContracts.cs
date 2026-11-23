@@ -1,0 +1,33 @@
+using Domain;
+
+namespace Application;
+
+public sealed record CardData(Card Card, Guid AuthorId, string AuthorDisplayName);
+
+public sealed record MeetingCard(
+    Guid Id,
+    Guid ColumnId,
+    string? Text,
+    Guid? AuthorId,
+    string? AuthorDisplayName,
+    bool IsMine,
+    bool IsHidden,
+    int Version);
+
+public sealed record MeetingReadiness(int ReadyCount, int TotalCount, bool MyReady);
+
+public enum MeetingCommandStatus
+{
+    Success,
+    NotFound,
+    Forbidden,
+    InvalidPhase,
+    VersionConflict,
+    OperationConflict,
+}
+
+public sealed record MeetingCommandResult(
+    MeetingCommandStatus Status,
+    int Version = 0,
+    Guid? EntityId = null,
+    bool IsReplay = false);

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Api.Contracts;
 
 public sealed class ColumnRequest
@@ -65,6 +67,18 @@ public sealed record ParticipantResponse(
     string Status,
     bool IsOnline);
 
+public sealed record MeetingCardResponse(
+    string Id,
+    string ColumnId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? AuthorId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? AuthorDisplayName,
+    bool IsMine,
+    bool IsHidden,
+    int Version);
+
+public sealed record MeetingReadinessResponse(int ReadyCount, int TotalCount, bool MyReady);
+
 public sealed record MeetingStateResponse(
     DateTimeOffset ServerNowUtc,
     string Id,
@@ -79,7 +93,48 @@ public sealed record MeetingStateResponse(
     bool AnonymousVotes,
     VoteSettingsResponse VoteSettings,
     IReadOnlyList<ColumnResponse> Columns,
-    IReadOnlyList<ParticipantResponse> Participants);
+    IReadOnlyList<ParticipantResponse> Participants,
+    IReadOnlyList<MeetingCardResponse> Cards,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingReadinessResponse? Readiness);
+
+public sealed class CreateCardRequest
+{
+    public Guid ColumnId { get; set; }
+
+    public string? Text { get; set; }
+
+    public Guid OperationId { get; set; }
+}
+
+public sealed class UpdateCardRequest
+{
+    public string? Text { get; set; }
+
+    public int ExpectedVersion { get; set; }
+}
+
+public sealed class DeleteCardRequest
+{
+    public int ExpectedVersion { get; set; }
+}
+
+public sealed record CardCreatedResponse(string Id, int Version);
+
+public sealed class SetReadinessRequest
+{
+    public bool Ready { get; set; }
+
+    public string Phase { get; set; } = string.Empty;
+}
+
+public sealed class AdvanceMeetingRequest
+{
+    public string FromPhase { get; set; } = string.Empty;
+
+    public int ExpectedVersion { get; set; }
+
+    public Guid OperationId { get; set; }
+}
 
 public sealed record VersionResponse(int Version);
 

@@ -12,7 +12,7 @@
     } @else if (state(); as meeting) {
       <header>
         <div>
-          <p class="eyebrow">{{ meeting.phase }}</p>
+          <p class="eyebrow">{{ phaseLabel(meeting.phase) }}</p>
           <h1>{{ meeting.name }}</h1>
         </div>
         <span>Версия {{ meeting.version }}</span>
@@ -28,35 +28,129 @@
         <p class="notice" role="status">{{ message }}</p>
       }
 
-      @if (meeting.canManage) {
-        <section>
-          <h2>Настройки подготовки</h2>
-          <app-meeting-form
-            [(name)]="name"
-            [(columns)]="columns"
-            [(anonymousCards)]="anonymousCards"
-            [(privateCollection)]="privateCollection"
-            [(anonymousVotes)]="anonymousVotes"
-            [(voteSettings)]="voteSettings"
-            [busy]="commandsBlocked()"
-            submitLabel="Сохранить настройки"
-            (submitted)="save()" />
+      @if (meeting.canManage && meeting.phase !== 'Discuss' && meeting.phase !== 'Closed') {
+        <section class="facilitator-actions">
+          <h2>Действия фасилитатора</h2>
+          <button tuiButton type="button" (click)="advance()" [disabled]="commandsBlocked()">{{ advanceLabel(meeting.phase) }}</button>
         </section>
+      }
 
-        <section>
-          <h2>Шаблоны</h2>
-          <div class="inline">
-            <select aria-label="Шаблон колонок" name="template" [(ngModel)]="selectedTemplate">
-              <option value="">Выберите шаблон</option>
-              @for (template of templates(); track template.id) {
-                <option [value]="template.id">{{ template.name }}</option>
+      @if (meeting.readiness; as readiness) {
+        <section class="readiness">
+          <h2>{{ readinessText() }}</h2>
+          <label>
+            <input
+              type="checkbox"
+              [ngModel]="readiness.myReady"
+              (ngModelChange)="setReady($event)"
+              [disabled]="commandsBlocked()" />
+            Я готов
+          </label>
+          <p class="hint">Фаза не изменится автоматически. Переход выполняет фасилитатор.</p>
+        </section>
+      }
+
+      @if (meeting.phase === 'Draft') {
+        @if (meeting.canManage) {
+          <section>
+            <h2>Настройки подготовки</h2>
+            <app-meeting-form
+              [(name)]="name"
+              [(columns)]="columns"
+              [(anonymousCards)]="anonymousCards"
+              [(privateCollection)]="privateCollection"
+              [(anonymousVotes)]="anonymousVotes"
+              [(voteSettings)]="voteSettings"
+              [busy]="commandsBlocked()"
+              submitLabel="Сохранить настройки"
+              (submitted)="save()" />
+          </section>
+
+          <section>
+            <h2>Шаблоны</h2>
+            <div class="inline">
+              <select aria-label="Шаблон колонок" name="template" [(ngModel)]="selectedTemplate">
+                <option value="">Выберите шаблон</option>
+                @for (template of templates(); track template.id) {
+                  <option [value]="template.id">{{ template.name }}</option>
+                }
+              </select>
+              <button tuiButton type="button" appearance="secondary" (click)="applyTemplate()" [disabled]="!selectedTemplate() || commandsBlocked()">Применить</button>
+              <button tuiButton type="button" appearance="secondary" (click)="saveAsTemplate()" [disabled]="commandsBlocked()">Сохранить колонки как шаблон</button>
+            </div>
+          </section>
+        } @else {
+          <section>
+            <h2>Колонки</h2>
+            <div class="columns-preview">
+              @for (column of meeting.columns; track column.id) {
+                <span [style.color]="column.color">{{ column.name }}</span>
               }
-            </select>
-            <button tuiButton type="button" appearance="secondary" (click)="applyTemplate()" [disabled]="!selectedTemplate() || commandsBlocked()">Применить</button>
-            <button tuiButton type="button" appearance="secondary" (click)="saveAsTemplate()" [disabled]="commandsBlocked()">Сохранить колонки как шаблон</button>
+            </div>
+            <p>Настройки изменяет только фасилитатор.</p>
+          </section>
+        }
+      } @else {
+        <section class="board-section">
+          <h2>Доска</h2>
+          <div class="board">
+            @for (column of meeting.columns; track column.id) {
+              <section class="board-column" [attr.aria-label]="column.name">
+                <h3 [style.color]="column.color">{{ column.name }}</h3>
+                @for (card of cardsForColumn(column.id); track card.id) {
+                  <article class="card" [class.hidden-card]="card.isHidden">
+                    @if (card.isHidden) {
+                      <p>Карточка скрыта до группировки</p>
+                    } @else if (editingCardId() === card.id && meeting.phase === 'Collect') {
+                      <label>
+                        <span class="visually-hidden">Текст карточки</span>
+                        <textarea [(ngModel)]="editingText" maxlength="4000" rows="5" aria-label="Текст редактируемой карточки"></textarea>
+                      </label>
+                      <div class="card-actions">
+                        <button tuiButton type="button" size="s" (click)="saveCard(card)" [disabled]="commandsBlocked()">Сохранить карточку</button>
+                        <button tuiButton type="button" size="s" appearance="secondary" (click)="cancelEdit()" [disabled]="commandsBlocked()">Отмена</button>
+                      </div>
+                    } @else {
+                      <p class="card-text">{{ card.text }}</p>
+                    }
+                    @if (!card.isHidden && editingCardId() !== card.id) {
+                      <footer>
+                        @if (card.isMine) { <span class="own-card">Моя карточка</span> }
+                        @if (card.authorDisplayName; as author) { <span>{{ author }}</span> }
+                      </footer>
+                    }
+                    @if (meeting.phase === 'Collect' && card.isMine && editingCardId() !== card.id) {
+                      <div class="card-actions">
+                        <button tuiButton type="button" size="s" appearance="secondary" (click)="startEdit(card)" [disabled]="commandsBlocked()">Изменить</button>
+                        <button tuiButton type="button" size="s" appearance="secondary" (click)="deleteCard(card)" [disabled]="commandsBlocked()">Удалить карточку</button>
+                      </div>
+                    }
+                  </article>
+                } @empty {
+                  <p class="hint">В этой колонке пока нет карточек.</p>
+                }
+                @if (meeting.phase === 'Collect') {
+                  <form class="new-card" (ngSubmit)="createCard(column.id)">
+                    <label>
+                      <span>Новая карточка</span>
+                      <textarea
+                        [ngModel]="newCardText(column.id)"
+                        (ngModelChange)="setNewCardText(column.id, $event)"
+                        [name]="'card-' + column.id"
+                        maxlength="4000"
+                        rows="4"
+                        required></textarea>
+                    </label>
+                    <button tuiButton type="submit" size="s" [disabled]="commandsBlocked()">Добавить карточку</button>
+                  </form>
+                }
+              </section>
+            }
           </div>
         </section>
+      }
 
+      @if (meeting.canManage && meeting.phase !== 'Closed') {
         <section>
           <h2>Приглашение</h2>
           @if (invite(); as currentInvite) {
@@ -83,16 +177,6 @@
             <button tuiButton type="button" appearance="secondary" (click)="transferRole()" [disabled]="!selectedMember() || commandsBlocked()">Передать роль</button>
             <button tuiButton type="button" appearance="secondary" (click)="excludeMember()" [disabled]="!selectedMember() || commandsBlocked()">Исключить</button>
           </div>
-        </section>
-      } @else {
-        <section>
-          <h2>Колонки</h2>
-          <div class="columns">
-            @for (column of meeting.columns; track column.id) {
-              <span [style.color]="column.color">{{ column.name }}</span>
-            }
-          </div>
-          <p>Настройки изменяет только фасилитатор.</p>
         </section>
       }
 

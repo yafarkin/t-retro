@@ -8,6 +8,8 @@ import { MeetingForm } from './meeting-form';
 import {
   defaultColumns,
   defaultVoteSettings,
+  MeetingCard,
+  MeetingPhase,
   MeetingSettingsPayload,
   MeetingState,
   MeetingTemplate,
@@ -42,6 +44,9 @@ export class MeetingSettingsPage {
   readonly selectedMember = signal('');
   readonly invite = signal<{ url: string; version: number } | null>(null);
   readonly copied = signal(false);
+  readonly newCardTexts = signal<Record<string, string>>({});
+  readonly editingCardId = signal<string | null>(null);
+  readonly editingText = signal('');
   readonly otherParticipants = computed(() =>
     this.state()?.participants.filter((participant) =>
       participant.status === 'Active' && participant.id !== this.state()?.facilitatorId) ?? []);
@@ -88,10 +93,7 @@ export class MeetingSettingsPage {
         this.busy.set(false);
         this.notice.set('Настройки сохранены.');
       },
-      error: (error: HttpErrorResponse) => {
-        this.error.set(apiErrorMessage(error));
-        this.busy.set(false);
-      },
+      error: (error: HttpErrorResponse) => this.commandFailed(error),
     });
   }
 
@@ -188,6 +190,170 @@ export class MeetingSettingsPage {
     });
   }
 
+  newCardText(columnId: string): string {
+    return this.newCardTexts()[columnId] ?? '';
+  }
+
+  setNewCardText(columnId: string, text: string): void {
+    this.newCardTexts.update((texts) => ({ ...texts, [columnId]: text }));
+  }
+
+  createCard(columnId: string): void {
+    if (this.commandsBlocked()) {
+      return;
+    }
+    const text = this.newCardText(columnId);
+    if (!text.trim()) {
+      this.error.set('Введите текст карточки.');
+      return;
+    }
+
+    this.busy.set(true);
+    this.error.set(null);
+    this.notice.set(null);
+    this.meetings.createCard(this.meetingId, columnId, text).subscribe({
+      next: () => {
+        this.setNewCardText(columnId, '');
+        this.busy.set(false);
+        this.notice.set('Карточка добавлена.');
+        void this.sync.refresh();
+      },
+      error: (error: HttpErrorResponse) => this.commandFailed(error),
+    });
+  }
+
+  startEdit(card: MeetingCard): void {
+    this.editingCardId.set(card.id);
+    this.editingText.set(card.text ?? '');
+    this.error.set(null);
+  }
+
+  cancelEdit(): void {
+    this.editingCardId.set(null);
+    this.editingText.set('');
+  }
+
+  saveCard(card: MeetingCard): void {
+    if (this.commandsBlocked()) {
+      return;
+    }
+    const text = this.editingText();
+    if (!text.trim()) {
+      this.error.set('Введите текст карточки.');
+      return;
+    }
+
+    this.busy.set(true);
+    this.error.set(null);
+    this.meetings.updateCard(this.meetingId, card.id, text, card.version).subscribe({
+      next: () => {
+        this.cancelEdit();
+        this.busy.set(false);
+        this.notice.set('Карточка обновлена.');
+        void this.sync.refresh();
+      },
+      error: (error: HttpErrorResponse) => this.commandFailed(error),
+    });
+  }
+
+  deleteCard(card: MeetingCard): void {
+    if (this.commandsBlocked() || !window.confirm('Удалить эту карточку?')) {
+      return;
+    }
+
+    this.busy.set(true);
+    this.error.set(null);
+    this.meetings.deleteCard(this.meetingId, card.id, card.version).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.notice.set('Карточка удалена.');
+        void this.sync.refresh();
+      },
+      error: (error: HttpErrorResponse) => this.commandFailed(error),
+    });
+  }
+
+  setReady(ready: boolean): void {
+    const current = this.state();
+    if (!current || this.commandsBlocked()) {
+      return;
+    }
+
+    this.busy.set(true);
+    this.error.set(null);
+    this.meetings.setReady(this.meetingId, current.phase, ready).subscribe({
+      next: () => {
+        this.busy.set(false);
+        void this.sync.refresh();
+      },
+      error: (error: HttpErrorResponse) => {
+        this.commandFailed(error);
+        void this.sync.refresh();
+      },
+    });
+  }
+
+  advance(): void {
+    const current = this.state();
+    if (!current || this.commandsBlocked()) {
+      return;
+    }
+    if (current.phase === 'Discuss' && !window.confirm('Завершить ретро?')) {
+      return;
+    }
+
+    this.busy.set(true);
+    this.error.set(null);
+    this.notice.set(null);
+    this.meetings.advance(this.meetingId, current.phase, current.version).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.notice.set('Встреча переведена на следующую фазу.');
+        void this.sync.refresh();
+      },
+      error: (error: HttpErrorResponse) => this.commandFailed(error),
+    });
+  }
+
+  cardsForColumn(columnId: string): MeetingCard[] {
+    return this.state()?.cards.filter((card) => card.columnId === columnId) ?? [];
+  }
+
+  readinessText(): string {
+    const readiness = this.state()?.readiness;
+    if (!readiness) {
+      return '';
+    }
+    const count = `${readiness.readyCount}/${readiness.totalCount}`;
+    return readiness.readyCount === readiness.totalCount && readiness.totalCount > 0
+      ? `Все готовы (${count})`
+      : `Готово ${count}`;
+  }
+
+  phaseLabel(phase: MeetingPhase): string {
+    const labels: Record<MeetingPhase, string> = {
+      Draft: 'Подготовка',
+      Collect: 'Сбор карточек',
+      Group: 'Группировка',
+      Vote: 'Голосование',
+      Discuss: 'Обсуждение',
+      Closed: 'Завершена',
+    };
+    return labels[phase];
+  }
+
+  advanceLabel(phase: MeetingPhase): string {
+    const labels: Record<MeetingPhase, string> = {
+      Draft: 'Начать сбор',
+      Collect: 'Перейти к группировке',
+      Group: 'Открыть голосование',
+      Vote: 'Перейти к обсуждению',
+      Discuss: 'Завершить ретро',
+      Closed: 'Встреча завершена',
+    };
+    return labels[phase];
+  }
+
   connectionText(): string {
     const states = {
       connected: 'Соединение активно',
@@ -204,6 +370,11 @@ export class MeetingSettingsPage {
       this.error.set(error instanceof Error ? error.message : 'Не удалось подключиться к встрече.');
       this.loading.set(false);
     }
+  }
+
+  private commandFailed(error: HttpErrorResponse): void {
+    this.error.set(apiErrorMessage(error));
+    this.busy.set(false);
   }
 
   private applyState(state: MeetingState): void {

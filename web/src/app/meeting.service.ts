@@ -50,4 +50,37 @@ export class MeetingService {
   transfer(meetingId: string, userId: string): Observable<void> {
     return this.http.put<void>(`/api/meetings/${meetingId}/facilitator`, { userId });
   }
+
+  createCard(meetingId: string, columnId: string, text: string): Observable<{ id: string; version: number }> {
+    return this.http.post<{ id: string; version: number }>(`/api/meetings/${meetingId}/cards`, {
+      columnId,
+      text,
+      operationId: crypto.randomUUID(),
+    });
+  }
+
+  updateCard(meetingId: string, cardId: string, text: string, expectedVersion: number): Observable<{ version: number }> {
+    return this.http.put<{ version: number }>(`/api/meetings/${meetingId}/cards/${cardId}`, {
+      text,
+      expectedVersion,
+    });
+  }
+
+  deleteCard(meetingId: string, cardId: string, expectedVersion: number): Observable<{ version: number }> {
+    return this.http.request<{ version: number }>('DELETE', `/api/meetings/${meetingId}/cards/${cardId}`, {
+      body: { expectedVersion },
+    });
+  }
+
+  setReady(meetingId: string, phase: string, ready: boolean): Observable<{ version: number }> {
+    return this.http.put<{ version: number }>(`/api/meetings/${meetingId}/ready`, { phase, ready });
+  }
+
+  advance(meetingId: string, fromPhase: string, expectedVersion: number): Observable<{ version: number }> {
+    return this.http.post<{ version: number }>(`/api/meetings/${meetingId}/advance`, {
+      fromPhase,
+      expectedVersion,
+      operationId: crypto.randomUUID(),
+    });
+  }
 }

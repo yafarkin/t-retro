@@ -75,7 +75,37 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 row.DisplayName,
                 Enum.Parse<MemberStatus>(row.Status)))
             .ToArray();
-        return new MeetingStateData(MapMeeting(meetingRow), columns, participants);
+        var cards = (await connection.QueryAsync<CardRow>(
+            """
+            SELECT c.id AS Id, c.meeting_id AS MeetingId, c.column_id AS ColumnId,
+                   c.text AS Text, c.version AS Version,
+                   c.created_at_utc AS CreatedAtUtc, c.updated_at_utc AS UpdatedAtUtc,
+                   a.user_id AS AuthorId, u.display_name AS AuthorDisplayName
+            FROM cards c
+            JOIN card_authors a ON a.meeting_id = c.meeting_id AND a.card_id = c.id
+            JOIN users u ON u.id = a.user_id
+            WHERE c.meeting_id = @MeetingId
+            ORDER BY c.created_at_utc, c.id;
+            """,
+            new { MeetingId = meetingId.ToString() }))
+            .Select(row => new CardData(
+                new Card(
+                    Guid.Parse(row.Id),
+                    Guid.Parse(row.MeetingId),
+                    Guid.Parse(row.ColumnId),
+                    row.Text,
+                    row.Version,
+                    SqliteMapping.Time(row.CreatedAtUtc),
+                    SqliteMapping.Time(row.UpdatedAtUtc)),
+                Guid.Parse(row.AuthorId),
+                row.AuthorDisplayName))
+            .ToArray();
+        var readyUserIds = (await connection.QueryAsync<string>(
+            "SELECT user_id FROM readiness WHERE meeting_id = @MeetingId AND phase = @Phase;",
+            new { MeetingId = meetingId.ToString(), Phase = meetingRow.Phase }))
+            .Select(Guid.Parse)
+            .ToHashSet();
+        return new MeetingStateData(MapMeeting(meetingRow), columns, participants, cards, readyUserIds);
     }
 
     public async Task<MeetingMember?> FindMemberAsync(
@@ -545,6 +575,552 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         return affected > 0;
     }
 
+    public async Task<MeetingCommandResult> CreateCardAsync(
+        Card card,
+        Guid authorId,
+        Guid operationId,
+        string fingerprint,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var state = await GetCommandStateAsync(connection, transaction, card.MeetingId, authorId);
+        var accessError = CheckMemberAccess(state);
+        if (accessError is not null)
+        {
+            return accessError;
+        }
+
+        var replay = await FindReplayAsync(
+            connection,
+            transaction,
+            card.MeetingId,
+            authorId,
+            operationId,
+            "CreateCard",
+            fingerprint);
+        if (replay is not null)
+        {
+            return replay;
+        }
+
+        if (state!.Phase != MeetingPhase.Collect.ToString())
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.InvalidPhase);
+        }
+
+        var columnExists = await connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM columns WHERE meeting_id = @MeetingId AND id = @ColumnId;",
+            new { MeetingId = card.MeetingId.ToString(), ColumnId = card.ColumnId.ToString() },
+            transaction);
+        if (columnExists == 0)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.NotFound);
+        }
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO cards (meeting_id, id, column_id, text, version, created_at_utc, updated_at_utc)
+            VALUES (@MeetingId, @Id, @ColumnId, @Text, @Version, @CreatedAtUtc, @UpdatedAtUtc);
+            """,
+            new
+            {
+                MeetingId = card.MeetingId.ToString(),
+                Id = card.Id.ToString(),
+                ColumnId = card.ColumnId.ToString(),
+                card.Text,
+                card.Version,
+                CreatedAtUtc = card.CreatedAtUtc.ToString("O"),
+                UpdatedAtUtc = card.UpdatedAtUtc.ToString("O"),
+            },
+            transaction);
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO card_authors (meeting_id, card_id, user_id)
+            VALUES (@MeetingId, @CardId, @UserId);
+            """,
+            new
+            {
+                MeetingId = card.MeetingId.ToString(),
+                CardId = card.Id.ToString(),
+                UserId = authorId.ToString(),
+            },
+            transaction);
+        var newVersion = state.Version + 1;
+        var affected = await connection.ExecuteAsync(
+            """
+            UPDATE meetings
+            SET version = @NewVersion, board_version = board_version + 1, updated_at_utc = @Now
+            WHERE id = @MeetingId AND version = @ExpectedVersion AND phase = 'Collect';
+            """,
+            new
+            {
+                MeetingId = card.MeetingId.ToString(),
+                NewVersion = newVersion,
+                ExpectedVersion = state.Version,
+                Now = card.UpdatedAtUtc.ToString("O"),
+            },
+            transaction);
+        if (affected == 0)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.VersionConflict);
+        }
+
+        await SaveReplayAsync(
+            connection,
+            transaction,
+            card.MeetingId,
+            authorId,
+            operationId,
+            "CreateCard",
+            fingerprint,
+            card.Id,
+            newVersion,
+            card.CreatedAtUtc);
+        await transaction.CommitAsync(cancellationToken);
+        return new MeetingCommandResult(MeetingCommandStatus.Success, newVersion, card.Id);
+    }
+
+    public async Task<MeetingCommandResult> UpdateCardAsync(
+        Card card,
+        Guid authorId,
+        int expectedCardVersion,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var state = await GetCommandStateAsync(connection, transaction, card.MeetingId, authorId);
+        var accessError = CheckMemberAccess(state);
+        if (accessError is not null)
+        {
+            return accessError;
+        }
+
+        if (state!.Phase != MeetingPhase.Collect.ToString())
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.InvalidPhase);
+        }
+
+        var current = await GetCardCommandStateAsync(connection, transaction, card.MeetingId, card.Id);
+        var cardError = CheckCardAccess(current, authorId, expectedCardVersion);
+        if (cardError is not null)
+        {
+            return cardError;
+        }
+
+        var newVersion = state.Version + 1;
+        var affected = await connection.ExecuteAsync(
+            """
+            UPDATE cards
+            SET text = @Text, version = @Version, updated_at_utc = @UpdatedAtUtc
+            WHERE meeting_id = @MeetingId AND id = @Id AND version = @ExpectedVersion
+              AND EXISTS (
+                  SELECT 1 FROM card_authors
+                  WHERE meeting_id = @MeetingId AND card_id = @Id AND user_id = @AuthorId);
+            """,
+            new
+            {
+                MeetingId = card.MeetingId.ToString(),
+                Id = card.Id.ToString(),
+                card.Text,
+                card.Version,
+                UpdatedAtUtc = card.UpdatedAtUtc.ToString("O"),
+                ExpectedVersion = expectedCardVersion,
+                AuthorId = authorId.ToString(),
+            },
+            transaction);
+        if (affected == 0)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.VersionConflict);
+        }
+
+        affected = await connection.ExecuteAsync(
+            """
+            UPDATE meetings SET version = @NewVersion, updated_at_utc = @Now
+            WHERE id = @MeetingId AND version = @ExpectedVersion AND phase = 'Collect';
+            """,
+            new
+            {
+                MeetingId = card.MeetingId.ToString(),
+                NewVersion = newVersion,
+                ExpectedVersion = state.Version,
+                Now = card.UpdatedAtUtc.ToString("O"),
+            },
+            transaction);
+        if (affected == 0)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.VersionConflict);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return new MeetingCommandResult(MeetingCommandStatus.Success, newVersion, card.Id);
+    }
+
+    public async Task<MeetingCommandResult> DeleteCardAsync(
+        Guid meetingId,
+        Guid cardId,
+        Guid authorId,
+        int expectedCardVersion,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var state = await GetCommandStateAsync(connection, transaction, meetingId, authorId);
+        var accessError = CheckMemberAccess(state);
+        if (accessError is not null)
+        {
+            return accessError;
+        }
+
+        if (state!.Phase != MeetingPhase.Collect.ToString())
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.InvalidPhase);
+        }
+
+        var current = await GetCardCommandStateAsync(connection, transaction, meetingId, cardId);
+        var cardError = CheckCardAccess(current, authorId, expectedCardVersion);
+        if (cardError is not null)
+        {
+            return cardError;
+        }
+
+        var affected = await connection.ExecuteAsync(
+            """
+            DELETE FROM cards
+            WHERE meeting_id = @MeetingId AND id = @CardId AND version = @ExpectedVersion
+              AND EXISTS (
+                  SELECT 1 FROM card_authors
+                  WHERE meeting_id = @MeetingId AND card_id = @CardId AND user_id = @AuthorId);
+            """,
+            new
+            {
+                MeetingId = meetingId.ToString(),
+                CardId = cardId.ToString(),
+                ExpectedVersion = expectedCardVersion,
+                AuthorId = authorId.ToString(),
+            },
+            transaction);
+        if (affected == 0)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.VersionConflict);
+        }
+
+        var newVersion = state.Version + 1;
+        affected = await connection.ExecuteAsync(
+            """
+            UPDATE meetings
+            SET version = @NewVersion, board_version = board_version + 1, updated_at_utc = @Now
+            WHERE id = @MeetingId AND version = @ExpectedVersion AND phase = 'Collect';
+            """,
+            new
+            {
+                MeetingId = meetingId.ToString(),
+                NewVersion = newVersion,
+                ExpectedVersion = state.Version,
+                Now = DateTimeOffset.UtcNow.ToString("O"),
+            },
+            transaction);
+        if (affected == 0)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.VersionConflict);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return new MeetingCommandResult(MeetingCommandStatus.Success, newVersion, cardId);
+    }
+
+    public async Task<MeetingCommandResult> SetReadinessAsync(
+        Guid meetingId,
+        Guid userId,
+        MeetingPhase phase,
+        bool ready,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var state = await GetCommandStateAsync(connection, transaction, meetingId, userId);
+        var accessError = CheckMemberAccess(state);
+        if (accessError is not null)
+        {
+            return accessError;
+        }
+
+        if (state!.Phase != phase.ToString()
+            || phase is not (MeetingPhase.Collect or MeetingPhase.Vote))
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.InvalidPhase);
+        }
+
+        var affected = ready
+            ? await connection.ExecuteAsync(
+                """
+                INSERT INTO readiness (meeting_id, user_id, phase)
+                VALUES (@MeetingId, @UserId, @Phase)
+                ON CONFLICT (meeting_id, user_id, phase) DO NOTHING;
+                """,
+                new { MeetingId = meetingId.ToString(), UserId = userId.ToString(), Phase = phase.ToString() },
+                transaction)
+            : await connection.ExecuteAsync(
+                "DELETE FROM readiness WHERE meeting_id = @MeetingId AND user_id = @UserId AND phase = @Phase;",
+                new { MeetingId = meetingId.ToString(), UserId = userId.ToString(), Phase = phase.ToString() },
+                transaction);
+        if (affected == 0)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.Success, state.Version, IsReplay: true);
+        }
+
+        var newVersion = state.Version + 1;
+        affected = await connection.ExecuteAsync(
+            """
+            UPDATE meetings SET version = @NewVersion, updated_at_utc = @Now
+            WHERE id = @MeetingId AND version = @ExpectedVersion AND phase = @Phase;
+            """,
+            new
+            {
+                MeetingId = meetingId.ToString(),
+                NewVersion = newVersion,
+                ExpectedVersion = state.Version,
+                Phase = phase.ToString(),
+                Now = nowUtc.ToString("O"),
+            },
+            transaction);
+        if (affected == 0)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.VersionConflict);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return new MeetingCommandResult(MeetingCommandStatus.Success, newVersion);
+    }
+
+    public async Task<MeetingCommandResult> AdvanceAsync(
+        Guid meetingId,
+        Guid facilitatorId,
+        MeetingPhase fromPhase,
+        MeetingPhase toPhase,
+        int expectedVersion,
+        Guid operationId,
+        string fingerprint,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var state = await GetCommandStateAsync(connection, transaction, meetingId, facilitatorId);
+        var accessError = CheckMemberAccess(state);
+        if (accessError is not null)
+        {
+            return accessError;
+        }
+
+        if (state!.FacilitatorId != facilitatorId.ToString())
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.Forbidden);
+        }
+
+        var replay = await FindReplayAsync(
+            connection,
+            transaction,
+            meetingId,
+            facilitatorId,
+            operationId,
+            "Advance",
+            fingerprint);
+        if (replay is not null)
+        {
+            return replay;
+        }
+
+        if (state.Phase != fromPhase.ToString() || fromPhase == MeetingPhase.Closed)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.InvalidPhase);
+        }
+
+        if (state.Version != expectedVersion)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.VersionConflict);
+        }
+
+        var newVersion = expectedVersion + 1;
+        var affected = await connection.ExecuteAsync(
+            """
+            UPDATE meetings
+            SET phase = @ToPhase, version = @NewVersion, updated_at_utc = @Now
+            WHERE id = @MeetingId AND facilitator_id = @FacilitatorId
+              AND phase = @FromPhase AND version = @ExpectedVersion;
+            """,
+            new
+            {
+                MeetingId = meetingId.ToString(),
+                FacilitatorId = facilitatorId.ToString(),
+                FromPhase = fromPhase.ToString(),
+                ToPhase = toPhase.ToString(),
+                ExpectedVersion = expectedVersion,
+                NewVersion = newVersion,
+                Now = nowUtc.ToString("O"),
+            },
+            transaction);
+        if (affected == 0)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.VersionConflict);
+        }
+
+        await connection.ExecuteAsync(
+            "DELETE FROM readiness WHERE meeting_id = @MeetingId;",
+            new { MeetingId = meetingId.ToString() },
+            transaction);
+        await SaveReplayAsync(
+            connection,
+            transaction,
+            meetingId,
+            facilitatorId,
+            operationId,
+            "Advance",
+            fingerprint,
+            null,
+            newVersion,
+            nowUtc);
+        await transaction.CommitAsync(cancellationToken);
+        return new MeetingCommandResult(MeetingCommandStatus.Success, newVersion);
+    }
+
+    private static async Task<CommandStateRow?> GetCommandStateAsync(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        Guid meetingId,
+        Guid userId) =>
+        await connection.QuerySingleOrDefaultAsync<CommandStateRow>(
+            """
+            SELECT m.phase AS Phase, m.version AS Version, m.facilitator_id AS FacilitatorId,
+                   member.status AS MemberStatus
+            FROM meetings m
+            LEFT JOIN members member ON member.meeting_id = m.id AND member.user_id = @UserId
+            WHERE m.id = @MeetingId;
+            """,
+            new { MeetingId = meetingId.ToString(), UserId = userId.ToString() },
+            transaction);
+
+    private static MeetingCommandResult? CheckMemberAccess(CommandStateRow? state)
+    {
+        if (state is null || state.MemberStatus is null)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.NotFound);
+        }
+
+        return state.MemberStatus == MemberStatus.Excluded.ToString()
+            ? new MeetingCommandResult(MeetingCommandStatus.Forbidden)
+            : null;
+    }
+
+    private static async Task<CardCommandRow?> GetCardCommandStateAsync(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        Guid meetingId,
+        Guid cardId) =>
+        await connection.QuerySingleOrDefaultAsync<CardCommandRow>(
+            """
+            SELECT c.version AS Version, a.user_id AS AuthorId
+            FROM cards c
+            LEFT JOIN card_authors a ON a.meeting_id = c.meeting_id AND a.card_id = c.id
+            WHERE c.meeting_id = @MeetingId AND c.id = @CardId;
+            """,
+            new { MeetingId = meetingId.ToString(), CardId = cardId.ToString() },
+            transaction);
+
+    private static MeetingCommandResult? CheckCardAccess(
+        CardCommandRow? card,
+        Guid authorId,
+        int expectedVersion)
+    {
+        if (card is null)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.NotFound);
+        }
+
+        if (card.AuthorId != authorId.ToString())
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.Forbidden);
+        }
+
+        return card.Version != expectedVersion
+            ? new MeetingCommandResult(MeetingCommandStatus.VersionConflict)
+            : null;
+    }
+
+    private static async Task<MeetingCommandResult?> FindReplayAsync(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        Guid meetingId,
+        Guid userId,
+        Guid operationId,
+        string operationType,
+        string fingerprint)
+    {
+        var row = await connection.QuerySingleOrDefaultAsync<CommandReplayRow>(
+            """
+            SELECT operation_type AS OperationType, fingerprint AS Fingerprint,
+                   result_id AS ResultId, result_version AS ResultVersion
+            FROM command_deduplication
+            WHERE meeting_id = @MeetingId AND user_id = @UserId AND operation_id = @OperationId;
+            """,
+            new
+            {
+                MeetingId = meetingId.ToString(),
+                UserId = userId.ToString(),
+                OperationId = operationId.ToString(),
+            },
+            transaction);
+        if (row is null)
+        {
+            return null;
+        }
+
+        if (row.OperationType != operationType || row.Fingerprint != fingerprint)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.OperationConflict);
+        }
+
+        return new MeetingCommandResult(
+            MeetingCommandStatus.Success,
+            row.ResultVersion,
+            row.ResultId is null ? null : Guid.Parse(row.ResultId),
+            true);
+    }
+
+    private static async Task SaveReplayAsync(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        Guid meetingId,
+        Guid userId,
+        Guid operationId,
+        string operationType,
+        string fingerprint,
+        Guid? resultId,
+        int resultVersion,
+        DateTimeOffset nowUtc) =>
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO command_deduplication (
+                meeting_id, user_id, operation_id, operation_type, fingerprint,
+                result_id, result_version, created_at_utc)
+            VALUES (
+                @MeetingId, @UserId, @OperationId, @OperationType, @Fingerprint,
+                @ResultId, @ResultVersion, @CreatedAtUtc);
+            """,
+            new
+            {
+                MeetingId = meetingId.ToString(),
+                UserId = userId.ToString(),
+                OperationId = operationId.ToString(),
+                OperationType = operationType,
+                Fingerprint = fingerprint,
+                ResultId = resultId?.ToString(),
+                ResultVersion = resultVersion,
+                CreatedAtUtc = nowUtc.ToString("O"),
+            },
+            transaction);
+
     private static async Task InsertMeetingAsync(
         IDbConnection connection,
         IDbTransaction transaction,
@@ -701,5 +1277,40 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
     {
         public int InvitationVersion { get; init; }
         public required string Phase { get; init; }
+    }
+
+    private sealed class CardRow
+    {
+        public required string Id { get; init; }
+        public required string MeetingId { get; init; }
+        public required string ColumnId { get; init; }
+        public required string Text { get; init; }
+        public int Version { get; init; }
+        public required string CreatedAtUtc { get; init; }
+        public required string UpdatedAtUtc { get; init; }
+        public required string AuthorId { get; init; }
+        public required string AuthorDisplayName { get; init; }
+    }
+
+    private sealed class CommandStateRow
+    {
+        public required string Phase { get; init; }
+        public int Version { get; init; }
+        public string? FacilitatorId { get; init; }
+        public string? MemberStatus { get; init; }
+    }
+
+    private sealed class CardCommandRow
+    {
+        public int Version { get; init; }
+        public string? AuthorId { get; init; }
+    }
+
+    private sealed class CommandReplayRow
+    {
+        public required string OperationType { get; init; }
+        public required string Fingerprint { get; init; }
+        public string? ResultId { get; init; }
+        public int ResultVersion { get; init; }
     }
 }

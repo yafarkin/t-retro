@@ -34,6 +34,19 @@ public sealed class MeetingAccessService(
         {
             IsOnline = presence.IsOnline(meetingId, participant.UserId),
         }).ToArray();
-        return new MeetingSnapshot(state.Meeting, state.Columns, participants, userId);
+        var cards = state.Cards
+            .Select(card => MeetingCardVisibility.Project(state.Meeting, card, userId))
+            .ToArray();
+        var activeParticipantIds = participants
+            .Where(participant => participant.Status == MemberStatus.Active)
+            .Select(participant => participant.UserId)
+            .ToHashSet();
+        var readiness = state.Meeting.Phase is MeetingPhase.Collect or MeetingPhase.Vote
+            ? new MeetingReadiness(
+                state.ReadyUserIds.Count(activeParticipantIds.Contains),
+                activeParticipantIds.Count,
+                state.ReadyUserIds.Contains(userId))
+            : null;
+        return new MeetingSnapshot(state.Meeting, state.Columns, participants, cards, readiness, userId);
     }
 }

@@ -33,7 +33,22 @@ public static class ApiMappings
                 participant.Subject,
                 participant.DisplayName,
                 participant.Status.ToString(),
-                participant.IsOnline)).ToArray());
+                participant.IsOnline)).ToArray(),
+            snapshot.Cards.Select(card => new MeetingCardResponse(
+                card.Id.ToString(),
+                card.ColumnId.ToString(),
+                card.Text,
+                card.AuthorId?.ToString(),
+                card.AuthorDisplayName,
+                card.IsMine,
+                card.IsHidden,
+                card.Version)).ToArray(),
+            snapshot.Readiness is null
+                ? null
+                : new MeetingReadinessResponse(
+                    snapshot.Readiness.ReadyCount,
+                    snapshot.Readiness.TotalCount,
+                    snapshot.Readiness.MyReady));
 
     public static ColumnInput ToInput(ColumnRequest column) => new(column.Name, column.Color);
 }

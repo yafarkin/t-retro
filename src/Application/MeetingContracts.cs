@@ -16,12 +16,16 @@ public sealed record MeetingParticipant(
 public sealed record MeetingStateData(
     Meeting Meeting,
     IReadOnlyList<MeetingColumn> Columns,
-    IReadOnlyList<MeetingParticipant> Participants);
+    IReadOnlyList<MeetingParticipant> Participants,
+    IReadOnlyList<CardData> Cards,
+    IReadOnlySet<Guid> ReadyUserIds);
 
 public sealed record MeetingSnapshot(
     Meeting Meeting,
     IReadOnlyList<MeetingColumn> Columns,
     IReadOnlyList<MeetingParticipant> Participants,
+    IReadOnlyList<MeetingCard> Cards,
+    MeetingReadiness? Readiness,
     Guid CurrentUserId)
 {
     public bool CanManage => Meeting.FacilitatorId == CurrentUserId;
