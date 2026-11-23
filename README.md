@@ -59,7 +59,7 @@ PDF генерируется локально через PDFsharp без сет�
 
 ## Подготовка инструментов
 
-На текущей машине .NET SDK 10.0.404 установлен в `/usr/local/share/dotnet`. В `PATH` также присутствует старая установка `/Users/yafarkin/.dotnet`, которая содержит только SDK 8 и 9. Поэтому перед командами .NET нужно поставить актуальную установку первой в `PATH`:
+Скрипты macOS используют системную установку .NET SDK из `/usr/local/share/dotnet` или уже настроенный `DOTNET_ROOT`. Для ручных команд при необходимости задайте переменные окружения:
 
 ```bash
 export DOTNET_ROOT="/usr/local/share/dotnet"
@@ -85,7 +85,7 @@ Docker на текущей машине отсутствует. Dockerfile и do
 
 `tools/run` требует предварительного успешного `tools/build`, применяет миграции и одновременно запускает API на `http://127.0.0.1:5166` и Angular на `http://127.0.0.1:4200`. Нажатие Ctrl+C останавливает оба процесса. Рабочая база остаётся в `src/Api/data/t-retro.db`.
 
-Тот же `tools/build` запускается в GitHub Actions из [.github/workflows/ci.yml](.github/workflows/ci.yml) на `macos-latest` для каждого push и pull request. Workflow использует `actions/setup-dotnet` и `actions/setup-node`, секреты и внешняя БД для текущих SQLite-проверок не нужны.
+Тот же `tools/build` запускается в GitHub Actions из [.github/workflows/ci.yml](.github/workflows/ci.yml) на `macos-latest` для каждого push и pull request. Workflow использует `actions/setup-dotnet`, `actions/setup-node` и отдельно устанавливает npm 12.1.0. Секреты и внешняя БД для текущих SQLite-проверок не нужны.
 
 ## Ручной запуск
 
