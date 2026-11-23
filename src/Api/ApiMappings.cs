@@ -66,6 +66,7 @@ public static class ApiMappings
                     snapshot.Voting.Spent,
                     snapshot.Voting.Remaining,
                     snapshot.Voting.BallotVersion),
+            snapshot.Discussion is null ? null : ToResponse(snapshot.Discussion),
             new MeetingIntegrationsResponse(snapshot.Integrations.Ai),
             snapshot.Readiness is null
                 ? null
@@ -75,4 +76,26 @@ public static class ApiMappings
                     snapshot.Readiness.MyReady));
 
     public static ColumnInput ToInput(ColumnRequest column) => new(column.Name, column.Color);
+
+    private static MeetingDiscussionResponse ToResponse(MeetingDiscussion discussion) =>
+        new(
+            discussion.CurrentTopicId?.ToString(),
+            discussion.Queue.Select(topic => new DiscussionTopicResponse(
+                topic.TopicId.ToString(),
+                topic.Position,
+                topic.Status.ToString().ToLowerInvariant())).ToArray(),
+            discussion.Comments.Select(comment => new TopicCommentResponse(
+                comment.Id.ToString(),
+                comment.TopicId.ToString(),
+                comment.Text)).ToArray(),
+            discussion.Decisions.Select(decision => new TopicDecisionResponse(
+                decision.Id.ToString(),
+                decision.TopicId.ToString(),
+                decision.Text)).ToArray(),
+            discussion.Actions.Select(action => new ActionItemResponse(
+                action.Id.ToString(),
+                action.TopicId.ToString(),
+                action.Text,
+                action.AssigneeId?.ToString(),
+                "notExported")).ToArray());
 }

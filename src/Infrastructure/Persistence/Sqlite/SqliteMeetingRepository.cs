@@ -151,6 +151,63 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 Guid.Parse(row.UserId),
                 row.Version))
             .ToArray();
+        IReadOnlyList<DiscussionTopic> discussionQueue = [];
+        Guid? currentTopicId = null;
+        IReadOnlyList<TopicComment> comments = [];
+        IReadOnlyList<TopicDecision> decisions = [];
+        IReadOnlyList<ActionItem> actions = [];
+        if (meetingRow.Phase == MeetingPhase.Discuss.ToString())
+        {
+            discussionQueue = (await connection.QueryAsync<DiscussionQueueRow>(
+                """
+                SELECT meeting_id AS MeetingId, topic_id AS TopicId, position AS Position, status AS Status
+                FROM discussion_topics WHERE meeting_id = @MeetingId ORDER BY position;
+                """,
+                new { MeetingId = meetingId.ToString() }))
+                .Select(row => new DiscussionTopic(
+                    Guid.Parse(row.MeetingId),
+                    Guid.Parse(row.TopicId),
+                    row.Position,
+                    Enum.Parse<DiscussionStatus>(row.Status)))
+                .ToArray();
+            var currentTopic = await connection.ExecuteScalarAsync<string?>(
+                "SELECT current_topic_id FROM discussion_state WHERE meeting_id = @MeetingId;",
+                new { MeetingId = meetingId.ToString() });
+            currentTopicId = currentTopic is null ? null : Guid.Parse(currentTopic);
+            comments = (await connection.QueryAsync<TextEntryRow>(
+                "SELECT id AS Id, meeting_id AS MeetingId, topic_id AS TopicId, text AS Text FROM comments WHERE meeting_id = @MeetingId ORDER BY id;",
+                new { MeetingId = meetingId.ToString() }))
+                .Select(row => new TopicComment(
+                    Guid.Parse(row.Id),
+                    Guid.Parse(row.MeetingId),
+                    Guid.Parse(row.TopicId),
+                    row.Text))
+                .ToArray();
+            decisions = (await connection.QueryAsync<TextEntryRow>(
+                "SELECT id AS Id, meeting_id AS MeetingId, topic_id AS TopicId, text AS Text FROM decisions WHERE meeting_id = @MeetingId ORDER BY id;",
+                new { MeetingId = meetingId.ToString() }))
+                .Select(row => new TopicDecision(
+                    Guid.Parse(row.Id),
+                    Guid.Parse(row.MeetingId),
+                    Guid.Parse(row.TopicId),
+                    row.Text))
+                .ToArray();
+            actions = (await connection.QueryAsync<ActionRow>(
+                """
+                SELECT id AS Id, meeting_id AS MeetingId, topic_id AS TopicId,
+                       text AS Text, assignee_id AS AssigneeId
+                FROM actions WHERE meeting_id = @MeetingId ORDER BY id;
+                """,
+                new { MeetingId = meetingId.ToString() }))
+                .Select(row => new ActionItem(
+                    Guid.Parse(row.Id),
+                    Guid.Parse(row.MeetingId),
+                    Guid.Parse(row.TopicId),
+                    row.Text,
+                    row.AssigneeId is null ? null : Guid.Parse(row.AssigneeId)))
+                .ToArray();
+        }
+
         return new MeetingStateData(
             MapMeeting(meetingRow),
             columns,
@@ -160,7 +217,12 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             groups,
             topics,
             votes,
-            ballots);
+            ballots,
+            discussionQueue,
+            currentTopicId,
+            comments,
+            decisions,
+            actions);
     }
 
     public async Task<MeetingMember?> FindMemberAsync(
@@ -1013,6 +1075,11 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             await InitializeVotingAsync(connection, transaction, meetingId);
         }
 
+        if (fromPhase == MeetingPhase.Vote && toPhase == MeetingPhase.Discuss)
+        {
+            await InitializeDiscussionAsync(connection, transaction, meetingId);
+        }
+
         var newVersion = expectedVersion + 1;
         var affected = await connection.ExecuteAsync(
             """
@@ -1054,6 +1121,58 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             nowUtc);
         await transaction.CommitAsync(cancellationToken);
         return new MeetingCommandResult(MeetingCommandStatus.Success, newVersion);
+    }
+
+    private static async Task InitializeDiscussionAsync(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        Guid meetingId)
+    {
+        var rankings = (await connection.QueryAsync<DiscussionRankingRow>(
+            """
+            SELECT t.id AS TopicId, COALESCE(SUM(v.count), 0) AS Votes,
+                   col.position AS ColumnPosition
+            FROM topics t
+            LEFT JOIN votes v ON v.meeting_id = t.meeting_id AND v.topic_id = t.id
+            LEFT JOIN cards c ON c.meeting_id = t.meeting_id AND c.id = t.card_id
+            LEFT JOIN groups g ON g.meeting_id = t.meeting_id AND g.id = t.group_id
+            LEFT JOIN columns col ON col.meeting_id = t.meeting_id
+                AND col.id = COALESCE(c.column_id, g.column_id)
+            WHERE t.meeting_id = @MeetingId
+            GROUP BY t.id, col.position;
+            """,
+            new { MeetingId = meetingId.ToString() },
+            transaction))
+            .Select(row => new DiscussionRanking(Guid.Parse(row.TopicId), row.Votes, row.ColumnPosition))
+            .ToArray();
+        var queue = DiscussionQueue.Create(meetingId, rankings);
+        foreach (var topic in queue)
+        {
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO discussion_topics (meeting_id, topic_id, position, status)
+                VALUES (@MeetingId, @TopicId, @Position, 'Pending');
+                """,
+                new
+                {
+                    MeetingId = meetingId.ToString(),
+                    TopicId = topic.TopicId.ToString(),
+                    topic.Position,
+                },
+                transaction);
+        }
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO discussion_state (meeting_id, current_topic_id)
+            VALUES (@MeetingId, @CurrentTopicId);
+            """,
+            new
+            {
+                MeetingId = meetingId.ToString(),
+                CurrentTopicId = queue.FirstOrDefault()?.TopicId.ToString(),
+            },
+            transaction);
     }
 
     private static async Task InitializeVotingAsync(
@@ -1448,6 +1567,38 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
     {
         public int Version { get; init; }
         public string? AuthorId { get; init; }
+    }
+
+    private sealed class DiscussionRankingRow
+    {
+        public required string TopicId { get; init; }
+        public int Votes { get; init; }
+        public int ColumnPosition { get; init; }
+    }
+
+    private sealed class DiscussionQueueRow
+    {
+        public required string MeetingId { get; init; }
+        public required string TopicId { get; init; }
+        public int Position { get; init; }
+        public required string Status { get; init; }
+    }
+
+    private sealed class TextEntryRow
+    {
+        public required string Id { get; init; }
+        public required string MeetingId { get; init; }
+        public required string TopicId { get; init; }
+        public required string Text { get; init; }
+    }
+
+    private sealed class ActionRow
+    {
+        public required string Id { get; init; }
+        public required string MeetingId { get; init; }
+        public required string TopicId { get; init; }
+        public required string Text { get; init; }
+        public string? AssigneeId { get; init; }
     }
 
     private sealed class CommandReplayRow

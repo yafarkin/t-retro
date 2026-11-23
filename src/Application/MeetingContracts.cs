@@ -22,7 +22,12 @@ public sealed record MeetingStateData(
     IReadOnlyList<MeetingGroup> Groups,
     IReadOnlyList<MeetingTopic> Topics,
     IReadOnlyList<VoteAllocation> Votes,
-    IReadOnlyList<PersonalBallot> Ballots);
+    IReadOnlyList<PersonalBallot> Ballots,
+    IReadOnlyList<DiscussionTopic> DiscussionQueue,
+    Guid? CurrentTopicId,
+    IReadOnlyList<TopicComment> Comments,
+    IReadOnlyList<TopicDecision> Decisions,
+    IReadOnlyList<ActionItem> Actions);
 
 public sealed record MeetingIntegrations(bool Ai);
 
@@ -34,6 +39,7 @@ public sealed record MeetingSnapshot(
     IReadOnlyList<MeetingGroup> Groups,
     IReadOnlyList<MeetingTopicResult> Topics,
     MeetingVoting? Voting,
+    MeetingDiscussion? Discussion,
     MeetingReadiness? Readiness,
     MeetingIntegrations Integrations,
     Guid CurrentUserId)

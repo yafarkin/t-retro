@@ -55,6 +55,14 @@ public sealed class MeetingAccessService(
         var voting = state.Meeting.Phase == MeetingPhase.Vote
             ? ProjectVoting(state, userId)
             : null;
+        var discussion = state.Meeting.Phase == MeetingPhase.Discuss
+            ? new MeetingDiscussion(
+                state.DiscussionQueue,
+                state.CurrentTopicId,
+                state.Comments,
+                state.Decisions,
+                state.Actions)
+            : null;
         return new MeetingSnapshot(
             state.Meeting,
             state.Columns,
@@ -63,6 +71,7 @@ public sealed class MeetingAccessService(
             state.Groups,
             topics,
             voting,
+            discussion,
             readiness,
             new MeetingIntegrations(groupSuggestions.IsAvailable),
             userId);

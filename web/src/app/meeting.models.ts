@@ -90,6 +90,42 @@ export interface MeetingVoting {
   ballotVersion: number;
 }
 
+export type DiscussionStatus = 'pending' | 'discussed' | 'skipped';
+
+export interface DiscussionTopic {
+  topicId: string;
+  position: number;
+  status: DiscussionStatus;
+}
+
+export interface TopicComment {
+  id: string;
+  topicId: string;
+  text: string;
+}
+
+export interface TopicDecision {
+  id: string;
+  topicId: string;
+  text: string;
+}
+
+export interface ActionItem {
+  id: string;
+  topicId: string;
+  text: string;
+  assigneeId: string | null;
+  exportStatus: string;
+}
+
+export interface MeetingDiscussion {
+  currentTopicId: string | null;
+  queue: DiscussionTopic[];
+  comments: TopicComment[];
+  decisions: TopicDecision[];
+  actions: ActionItem[];
+}
+
 export interface SuggestedGroup {
   name: string;
   columnId: string;
@@ -116,6 +152,7 @@ export interface MeetingState extends MeetingSettingsPayload {
   groups: MeetingGroup[];
   topics: MeetingTopic[];
   voting?: MeetingVoting;
+  discussion?: MeetingDiscussion;
   integrations: { ai: boolean };
   readiness?: MeetingReadiness;
 }

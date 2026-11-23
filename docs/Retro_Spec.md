@@ -136,7 +136,7 @@ PDF содержит название и дату встречи, количес
 | POST M/ai/preview, POST M/ai/apply | Вернуть предложение с версией доски и ID предложения. Применить проверенное предложение по ID, с повторной серверной валидацией |
 | PUT M/vote-settings, PUT M/topics/{id}/my-votes | Установить режим percent(P,M) либо fixed(B). Установить count своих голосов, вернуть новый личный остаток |
 | PUT M/discussion/current, PUT M/topics/{id}/status | Выбрать текущую тему, отметить состояние. Действие «Далее» одной командой статуса с advance=true также переключает общую текущую тему |
-| POST M/topics/{id}/comments или /actions, PUT/DELETE M/comments/{id} или M/actions/{id} | Создание дочернего объекта, изменение и удаление. Для задачи поля text и nullable assigneeId |
+| POST M/topics/{id}/comments, /decisions или /actions, PUT/DELETE M/comments/{id}, M/decisions/{id} или M/actions/{id} | Создание дочернего объекта, изменение и удаление. Комментарии и решения хранятся и передаются раздельно. Для задачи поля text и nullable assigneeId |
 | POST M/actions/{id}/export, GET M/report.pdf | Поставить создание задачи Jira в обработку или вернуть существующий статус. Скачать сохранённый отчёт |
 | POST M/timer/start, POST M/timer/add, POST M/timer/stop | Длительность в секундах для start/add. Повтор start с новым ID операции при работающем таймере — 409. Для add/stop передавать ID запуска |
 

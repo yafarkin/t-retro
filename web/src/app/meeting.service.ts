@@ -108,6 +108,107 @@ export class MeetingService {
     );
   }
 
+  selectCurrentTopic(meetingId: string, topicId: string, expectedVersion: number): Observable<{ version: number }> {
+    return this.http.put<{ version: number }>(`/api/meetings/${meetingId}/discussion/current`, {
+      topicId,
+      expectedVersion,
+    });
+  }
+
+  setTopicStatus(
+    meetingId: string,
+    topicId: string,
+    status: string,
+    advance: boolean,
+    expectedVersion: number,
+  ): Observable<{ version: number }> {
+    return this.http.put<{ version: number }>(`/api/meetings/${meetingId}/topics/${topicId}/status`, {
+      status,
+      advance,
+      expectedVersion,
+    });
+  }
+
+  createComment(meetingId: string, topicId: string, text: string, expectedVersion: number): Observable<{ id: string; version: number }> {
+    return this.createDiscussionEntry(meetingId, topicId, 'comments', { text, expectedVersion });
+  }
+
+  updateComment(meetingId: string, commentId: string, text: string, expectedVersion: number): Observable<{ version: number }> {
+    return this.updateDiscussionEntry(meetingId, 'comments', commentId, { text, expectedVersion });
+  }
+
+  deleteComment(meetingId: string, commentId: string, expectedVersion: number): Observable<{ version: number }> {
+    return this.deleteDiscussionEntry(meetingId, 'comments', commentId, expectedVersion);
+  }
+
+  createDecision(meetingId: string, topicId: string, text: string, expectedVersion: number): Observable<{ id: string; version: number }> {
+    return this.createDiscussionEntry(meetingId, topicId, 'decisions', { text, expectedVersion });
+  }
+
+  updateDecision(meetingId: string, decisionId: string, text: string, expectedVersion: number): Observable<{ version: number }> {
+    return this.updateDiscussionEntry(meetingId, 'decisions', decisionId, { text, expectedVersion });
+  }
+
+  deleteDecision(meetingId: string, decisionId: string, expectedVersion: number): Observable<{ version: number }> {
+    return this.deleteDiscussionEntry(meetingId, 'decisions', decisionId, expectedVersion);
+  }
+
+  createAction(
+    meetingId: string,
+    topicId: string,
+    text: string,
+    assigneeId: string | null,
+    expectedVersion: number,
+  ): Observable<{ id: string; version: number }> {
+    return this.createDiscussionEntry(meetingId, topicId, 'actions', { text, assigneeId, expectedVersion });
+  }
+
+  updateAction(
+    meetingId: string,
+    actionId: string,
+    text: string,
+    assigneeId: string | null,
+    expectedVersion: number,
+  ): Observable<{ version: number }> {
+    return this.updateDiscussionEntry(meetingId, 'actions', actionId, { text, assigneeId, expectedVersion });
+  }
+
+  deleteAction(meetingId: string, actionId: string, expectedVersion: number): Observable<{ version: number }> {
+    return this.deleteDiscussionEntry(meetingId, 'actions', actionId, expectedVersion);
+  }
+
+  private createDiscussionEntry(
+    meetingId: string,
+    topicId: string,
+    kind: string,
+    payload: object,
+  ): Observable<{ id: string; version: number }> {
+    return this.http.post<{ id: string; version: number }>(`/api/meetings/${meetingId}/topics/${topicId}/${kind}`, {
+      ...payload,
+      operationId: crypto.randomUUID(),
+    });
+  }
+
+  private updateDiscussionEntry(
+    meetingId: string,
+    kind: string,
+    entryId: string,
+    payload: object,
+  ): Observable<{ version: number }> {
+    return this.http.put<{ version: number }>(`/api/meetings/${meetingId}/${kind}/${entryId}`, payload);
+  }
+
+  private deleteDiscussionEntry(
+    meetingId: string,
+    kind: string,
+    entryId: string,
+    expectedVersion: number,
+  ): Observable<{ version: number }> {
+    return this.http.request<{ version: number }>('DELETE', `/api/meetings/${meetingId}/${kind}/${entryId}`, {
+      body: { expectedVersion },
+    });
+  }
+
   move(
     meetingId: string,
     sourceKind: string,

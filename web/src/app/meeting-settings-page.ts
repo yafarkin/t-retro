@@ -6,8 +6,10 @@ import { TuiButton } from '@taiga-ui/core';
 import { apiErrorMessage } from './api-error';
 import { MeetingForm } from './meeting-form';
 import {
+  ActionItem,
   defaultColumns,
   defaultVoteSettings,
+  DiscussionStatus,
   GroupProposal,
   MeetingCard,
   MeetingGroup,
@@ -15,6 +17,9 @@ import {
   MeetingSettingsPayload,
   MeetingState,
   MeetingTemplate,
+  MeetingTopic,
+  TopicComment,
+  TopicDecision,
 } from './meeting.models';
 import { MeetingService } from './meeting.service';
 import { MeetingSyncService } from './meeting-sync.service';
@@ -52,6 +57,14 @@ export class MeetingSettingsPage {
   readonly proposal = signal<GroupProposal | null>(null);
   readonly moveTargets = signal<Record<string, string>>({});
   readonly groupNames = signal<Record<string, string>>({});
+  readonly newCommentText = signal('');
+  readonly newDecisionText = signal('');
+  readonly newActionText = signal('');
+  readonly newActionAssignee = signal('');
+  readonly editingEntryKind = signal<'comments' | 'decisions' | 'actions' | null>(null);
+  readonly editingEntryId = signal<string | null>(null);
+  readonly editingEntryText = signal('');
+  readonly editingActionAssignee = signal('');
   readonly otherParticipants = computed(() =>
     this.state()?.participants.filter((participant) =>
       participant.status === 'Active' && participant.id !== this.state()?.facilitatorId) ?? []);
@@ -457,6 +470,221 @@ export class MeetingSettingsPage {
   proposalCards(cardIds: string[]): MeetingCard[] {
     const ids = new Set(cardIds);
     return this.state()?.cards.filter((card) => ids.has(card.id)) ?? [];
+  }
+
+  currentTopic(): MeetingTopic | undefined {
+    const current = this.state();
+    return current?.topics.find((topic) => topic.id === current.discussion?.currentTopicId);
+  }
+
+  discussionTopic(topicId: string): MeetingTopic | undefined {
+    return this.state()?.topics.find((topic) => topic.id === topicId);
+  }
+
+  currentTopicCards(): MeetingCard[] {
+    const current = this.state();
+    const topic = this.currentTopic();
+    if (!current || !topic) {
+      return [];
+    }
+    return topic.kind === 'group'
+      ? current.cards.filter((card) => card.groupId === topic.sourceId)
+      : current.cards.filter((card) => card.id === topic.sourceId);
+  }
+
+  selectDiscussionTopic(topicId: string): void {
+    const current = this.state();
+    if (!current || this.commandsBlocked()) {
+      return;
+    }
+    this.executeDiscussionCommand(
+      this.meetings.selectCurrentTopic(this.meetingId, topicId, current.version),
+      'Тема выбрана.',
+    );
+  }
+
+  setDiscussionStatus(status: DiscussionStatus, advance: boolean): void {
+    const current = this.state();
+    const topic = this.currentTopic();
+    if (!current || !topic || this.commandsBlocked()) {
+      return;
+    }
+    this.executeDiscussionCommand(
+      this.meetings.setTopicStatus(this.meetingId, topic.id, status, advance, current.version),
+      advance ? 'Открыта следующая тема.' : 'Статус темы изменён.',
+    );
+  }
+
+  discussionStatusLabel(status: DiscussionStatus): string {
+    const labels: Record<DiscussionStatus, string> = {
+      pending: 'Ожидает',
+      discussed: 'Обсуждена',
+      skipped: 'Пропущена',
+    };
+    return labels[status];
+  }
+
+  createComment(): void {
+    const current = this.state();
+    const topic = this.currentTopic();
+    const text = this.newCommentText().trim();
+    if (!current || !topic || !text || this.commandsBlocked()) {
+      return;
+    }
+    this.executeDiscussionCommand(
+      this.meetings.createComment(this.meetingId, topic.id, text, current.version),
+      'Комментарий добавлен.',
+      () => this.newCommentText.set(''),
+    );
+  }
+
+  createDecision(): void {
+    const current = this.state();
+    const topic = this.currentTopic();
+    const text = this.newDecisionText().trim();
+    if (!current || !topic || !text || this.commandsBlocked()) {
+      return;
+    }
+    this.executeDiscussionCommand(
+      this.meetings.createDecision(this.meetingId, topic.id, text, current.version),
+      'Решение добавлено.',
+      () => this.newDecisionText.set(''),
+    );
+  }
+
+  createAction(): void {
+    const current = this.state();
+    const topic = this.currentTopic();
+    const text = this.newActionText().trim();
+    if (!current || !topic || !text || this.commandsBlocked()) {
+      return;
+    }
+    this.executeDiscussionCommand(
+      this.meetings.createAction(
+        this.meetingId,
+        topic.id,
+        text,
+        this.newActionAssignee() || null,
+        current.version,
+      ),
+      'Задача добавлена.',
+      () => {
+        this.newActionText.set('');
+        this.newActionAssignee.set('');
+      },
+    );
+  }
+
+  currentComments(): TopicComment[] {
+    const current = this.state();
+    const topic = this.currentTopic();
+    return current?.discussion?.comments.filter((comment) => comment.topicId === topic?.id) ?? [];
+  }
+
+  currentDecisions(): TopicDecision[] {
+    const current = this.state();
+    const topic = this.currentTopic();
+    return current?.discussion?.decisions.filter((decision) => decision.topicId === topic?.id) ?? [];
+  }
+
+  currentActions(): ActionItem[] {
+    const current = this.state();
+    const topic = this.currentTopic();
+    return current?.discussion?.actions.filter((action) => action.topicId === topic?.id) ?? [];
+  }
+
+  startEntryEdit(
+    kind: 'comments' | 'decisions' | 'actions',
+    entry: TopicComment | TopicDecision | ActionItem,
+  ): void {
+    this.editingEntryKind.set(kind);
+    this.editingEntryId.set(entry.id);
+    this.editingEntryText.set(entry.text);
+    this.editingActionAssignee.set('assigneeId' in entry ? entry.assigneeId ?? '' : '');
+  }
+
+  cancelEntryEdit(): void {
+    this.editingEntryKind.set(null);
+    this.editingEntryId.set(null);
+    this.editingEntryText.set('');
+    this.editingActionAssignee.set('');
+  }
+
+  isEntryEditing(kind: string, entryId: string): boolean {
+    return this.editingEntryKind() === kind && this.editingEntryId() === entryId;
+  }
+
+  saveEntryEdit(): void {
+    const current = this.state();
+    const kind = this.editingEntryKind();
+    const entryId = this.editingEntryId();
+    const text = this.editingEntryText().trim();
+    if (!current || !kind || !entryId || !text || this.commandsBlocked()) {
+      return;
+    }
+    const command = kind === 'comments'
+      ? this.meetings.updateComment(this.meetingId, entryId, text, current.version)
+      : kind === 'decisions'
+        ? this.meetings.updateDecision(this.meetingId, entryId, text, current.version)
+        : this.meetings.updateAction(
+          this.meetingId,
+          entryId,
+          text,
+          this.editingActionAssignee() || null,
+          current.version,
+        );
+    this.executeDiscussionCommand(command, 'Изменения сохранены.', () => this.cancelEntryEdit());
+  }
+
+  deleteEntry(kind: 'comments' | 'decisions' | 'actions', entryId: string): void {
+    const current = this.state();
+    if (!current || this.commandsBlocked() || !window.confirm('Удалить запись?')) {
+      return;
+    }
+    const command = kind === 'comments'
+      ? this.meetings.deleteComment(this.meetingId, entryId, current.version)
+      : kind === 'decisions'
+        ? this.meetings.deleteDecision(this.meetingId, entryId, current.version)
+        : this.meetings.deleteAction(this.meetingId, entryId, current.version);
+    this.executeDiscussionCommand(command, 'Запись удалена.');
+  }
+
+  availableAssignees(currentAssigneeId: string | null = null) {
+    return this.state()?.participants.filter((participant) =>
+      participant.status === 'Active' || participant.id === currentAssigneeId) ?? [];
+  }
+
+  actionAssigneeName(assigneeId: string | null): string {
+    if (!assigneeId) {
+      return 'Без исполнителя';
+    }
+    return this.state()?.participants.find((participant) => participant.id === assigneeId)?.displayName
+      ?? 'Участник недоступен';
+  }
+
+  exportStatusLabel(status: string): string {
+    return status === 'notExported' ? 'Jira: не экспортировано' : status;
+  }
+
+  private executeDiscussionCommand(
+    command: ReturnType<MeetingService['updateComment']>,
+    success: string,
+    after?: () => void,
+  ): void {
+    this.busy.set(true);
+    this.error.set(null);
+    this.notice.set(null);
+    command.subscribe({
+      next: () => {
+        after?.();
+        this.notice.set(success);
+        void this.sync.refresh().finally(() => this.busy.set(false));
+      },
+      error: (error: HttpErrorResponse) => {
+        this.commandFailed(error);
+        void this.sync.refresh();
+      },
+    });
   }
 
   saveVoteSettings(): void {

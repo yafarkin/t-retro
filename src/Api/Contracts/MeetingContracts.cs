@@ -111,6 +111,26 @@ public sealed record MeetingVotingResponse(
 
 public sealed record MyVotesResponse(int Version, int BallotVersion, int Remaining);
 
+public sealed record DiscussionTopicResponse(string TopicId, int Position, string Status);
+
+public sealed record TopicCommentResponse(string Id, string TopicId, string Text);
+
+public sealed record TopicDecisionResponse(string Id, string TopicId, string Text);
+
+public sealed record ActionItemResponse(
+    string Id,
+    string TopicId,
+    string Text,
+    string? AssigneeId,
+    string ExportStatus);
+
+public sealed record MeetingDiscussionResponse(
+    string? CurrentTopicId,
+    IReadOnlyList<DiscussionTopicResponse> Queue,
+    IReadOnlyList<TopicCommentResponse> Comments,
+    IReadOnlyList<TopicDecisionResponse> Decisions,
+    IReadOnlyList<ActionItemResponse> Actions);
+
 public sealed record MeetingIntegrationsResponse(bool Ai);
 
 public sealed record MeetingReadinessResponse(int ReadyCount, int TotalCount, bool MyReady);
@@ -134,8 +154,70 @@ public sealed record MeetingStateResponse(
     IReadOnlyList<MeetingGroupResponse> Groups,
     IReadOnlyList<MeetingTopicResponse> Topics,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingVotingResponse? Voting,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingDiscussionResponse? Discussion,
     MeetingIntegrationsResponse Integrations,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingReadinessResponse? Readiness);
+
+public sealed class SelectCurrentTopicRequest
+{
+    public Guid TopicId { get; set; }
+    public int ExpectedVersion { get; set; }
+}
+
+public sealed class SetTopicStatusRequest
+{
+    public string Status { get; set; } = string.Empty;
+    public bool Advance { get; set; }
+    public int ExpectedVersion { get; set; }
+}
+
+public sealed class CreateCommentRequest
+{
+    public string? Text { get; set; }
+    public int ExpectedVersion { get; set; }
+    public Guid OperationId { get; set; }
+}
+
+public sealed class UpdateCommentRequest
+{
+    public string? Text { get; set; }
+    public int ExpectedVersion { get; set; }
+}
+
+public sealed class CreateDecisionRequest
+{
+    public string? Text { get; set; }
+    public int ExpectedVersion { get; set; }
+    public Guid OperationId { get; set; }
+}
+
+public sealed class UpdateDecisionRequest
+{
+    public string? Text { get; set; }
+    public int ExpectedVersion { get; set; }
+}
+
+public sealed class CreateActionRequest
+{
+    public string? Text { get; set; }
+    public Guid? AssigneeId { get; set; }
+    public int ExpectedVersion { get; set; }
+    public Guid OperationId { get; set; }
+}
+
+public sealed class UpdateActionRequest
+{
+    public string? Text { get; set; }
+    public Guid? AssigneeId { get; set; }
+    public int ExpectedVersion { get; set; }
+}
+
+public sealed class DeleteDiscussionEntryRequest
+{
+    public int ExpectedVersion { get; set; }
+}
+
+public sealed record DiscussionEntryCreatedResponse(string Id, int Version);
 
 public sealed class MoveCardRequest
 {

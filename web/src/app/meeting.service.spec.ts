@@ -68,4 +68,25 @@ describe('MeetingService', () => {
     expect(request.request.body).toEqual({ count: 2, expectedVersion: 1 });
     request.flush({ version: 5, ballotVersion: 2, remaining: 1 });
   });
+
+  it('advances discussion status with the meeting version', () => {
+    service.setTopicStatus('meeting-id', 'topic-id', 'discussed', true, 7).subscribe();
+
+    const request = http.expectOne('/api/meetings/meeting-id/topics/topic-id/status');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({ status: 'discussed', advance: true, expectedVersion: 7 });
+    request.flush({ version: 8 });
+  });
+
+  it('creates an action with an assignee and operation id', () => {
+    service.createAction('meeting-id', 'topic-id', 'Задача', 'user-id', 7).subscribe();
+
+    const request = http.expectOne('/api/meetings/meeting-id/topics/topic-id/actions');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body.text).toBe('Задача');
+    expect(request.request.body.assigneeId).toBe('user-id');
+    expect(request.request.body.expectedVersion).toBe(7);
+    expect(request.request.body.operationId).toMatch(/[0-9a-f-]{36}/);
+    request.flush({ id: 'action-id', version: 8 });
+  });
 });
