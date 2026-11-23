@@ -14,7 +14,7 @@
 
 Этапы с M0 по M9 завершены и отмечены в [плане](tasks.md). Локальный MVP теперь проходит полный маршрут от создания встречи до `Closed` и сохранённого PDF. Следующий этап — M10: итоговая проверка MVP, документация приёмки и повторный разбор frontend-зависимостей.
 
-Функциональный коммит M9 — `13375c8 Implement M9 meeting completion and PDF reports`. Вся локальная история отправлена в [GitHub](https://github.com/yafarkin/t-retro/tree/main), локальная `main` отслеживает `origin/main`. Существовавший на GitHub несвязанный `master` сохранён без изменений. Этот снимок обновляется отдельным документационным коммитом после публикации M9.
+Функциональный коммит M9 — `13375c8 Implement M9 meeting completion and PDF reports`, снимок публикации — `013ff03`. Вся история находится в [GitHub](https://github.com/yafarkin/t-retro/tree/master). Локальная и удалённая `main` удалены по запросу пользователя, осталась единственная `master`, отслеживающая `origin/master`. Старый несвязанный удалённый `master` был заменён актуальной историей с явного разрешения пользователя. Сейчас в работе macOS-скрипты и GitHub Actions; эти изменения ещё не закоммичены.
 
 Docker отсутствует и для проверок не используется. .NET SDK 10.0.404 находится в `/usr/local/share/dotnet`, настройка `PATH` описана в [README](../README.md#подготовка-инструментов).
 
@@ -38,6 +38,15 @@ Docker отсутствует и для проверок не используе
 - [PdfSharpMeetingReportGenerator](../src/Infrastructure/Reporting/PdfSharpMeetingReportGenerator.cs) формирует русский отчёт с итогами, колонками, карточками, группами, рейтингом включая нули, статусами, решениями, комментариями, задачами и открытыми сведениями по флагам. Длинные строки переносятся, страницы нумеруются, метаданные не содержат авторства участников.
 - [EmbeddedFontResolver](../src/Infrastructure/Reporting/EmbeddedFontResolver.cs) использует встроенные DejaVu Sans Regular/Bold 2.37 с кириллицей, не зависящие от ОС.
 - Лицензии: [PDFsharp](../src/Infrastructure/Reporting/PDFsharp-LICENSE.txt), [DejaVu](../src/Infrastructure/Reporting/Fonts/DejaVu-LICENSE.txt). Выбор и ссылки зафиксированы в [README](../README.md#завершение-и-pdf).
+
+## Инструменты macOS и CI
+
+- [tools/build](../tools/build) проверяет macOS и точные версии .NET, Node и npm, затем выполняет чистую сборку и все тесты. Скрипт совместим с Bash 3.2 и не требует Docker.
+- [tools/run](../tools/run) применяет миграции, запускает API и Angular, ждёт Ctrl+C и останавливает оба процесса. `NG_CLI_ANALYTICS=false` исключает интерактивный вопрос при запуске в TTY.
+- [web/playwright.config.ts](../web/playwright.config.ts) использует отдельную SQLite `.tools/e2e/t-retro.db`, поэтому E2E больше не изменяют рабочую `src/Api/data/t-retro.db`.
+- [.github/workflows/ci.yml](../.github/workflows/ci.yml) запускает тот же `tools/build` на `macos-latest` для push и pull request. Первый запуск GitHub Actions ещё нужно проверить после push.
+- Локально `tools/build` прошёл полностью: 85 backend-тестов, 11 unit-тестов и 9 E2E. `tools/run` проверен через псевдотерминал: оба URL стали доступны, Ctrl+C остановил серверы и освободил порты.
+- Документация переведена с GitLab CI на GitHub Actions. Сборка Docker-образа выделена в отдельную открытую задачу P3.6.
 
 ## Проверки
 
@@ -63,7 +72,7 @@ Docker отсутствует и для проверок не используе
 
 ## Незавершённая работа
 
-M9 завершён, проверен и опубликован в `origin/main`. Незавершённой реализации внутри этапа нет. Следующий этап M10 ещё не начат.
+M9 завершён, проверен и опубликован в `origin/master`. Незавершённой реализации внутри этапа нет. Скрипты и workflow локально готовы, остаётся закоммитить их, отправить и проверить удалённый запуск P3.4. Следующий функциональный этап M10 ещё не начат.
 
 В M10 нужно:
 
