@@ -195,7 +195,7 @@
 
 - [ ] **M10.6. Выполнить и зафиксировать чистую сборку.**
   - Убедиться, что перед запуском `git status --short` содержит только предусмотренные изменения, а лишние ветки и процессы отсутствуют.
-  - Выполнить из корня `./tools/build`. Скрипт сам проверит macOS, .NET SDK, Node и npm, выполнит restore/clean/build/test backend, `npm ci`, production build, unit-тесты и E2E.
+  - Выполнить из корня `./tools/build`. Скрипт сам проверит macOS или Ubuntu, .NET SDK, Node и npm, выполнит restore/clean/build/test backend, `npm ci`, production build, unit-тесты и E2E.
   - Проверить фактические итоги: backend без ошибок и предупреждений компилятора, frontend production build успешен, все unit/E2E прошли. Записать новые количества тестов в README вместо сохранения старых чисел.
   - Убедиться, что E2E используют `.tools/e2e`, а не `src/Api/data/t-retro.db`. Удалить только созданные `.tools/e2e` и `web/test-results`; рабочую базу и пользовательские файлы не трогать.
   - Отправить изменения в `master`, дождаться зелёного GitHub Actions для того же SHA и сохранить ссылку на run. Не считать предыдущий зелёный run доказательством для новых изменений.
@@ -243,7 +243,7 @@
 - [ ] **P3.1. Создать Dockerfile.** Настроить многостадийную сборку Angular и backend, копирование SPA в `wwwroot` и отдельную команду миграций.
 - [ ] **P3.2. Добавить манифесты Kubernetes.** Подготовить Deployment с `replicas=1` и `Recreate`, Service, пример ConfigMap и ссылки на существующие Secret по [§13](Retro_Spec.md#13-контейнер-эксплуатация-и-ci).
 - [ ] **P3.3. Настроить запуск миграций.** Добавить Job или initContainer с блокировкой миграций PostgreSQL и безопасным повтором.
-- [x] **P3.4. Добавить GitHub Actions.** Для push и pull request запускать `tools/build` на macOS: чистую установку, сборку SPA, restore, build и test .NET, unit-тесты и E2E.
+- [x] **P3.4. Добавить GitHub Actions.** Для push и pull request запускать `tools/build` на `ubuntu-latest` x86_64: чистую установку, сборку SPA, restore, build и test .NET, unit-тесты и E2E.
 - [ ] **P3.5. Описать runner и переменные.** Зафиксировать требования GitHub-hosted runner, переменную тестовой PostgreSQL и команды локального воспроизведения CI.
 - [ ] **P3.6. Добавить сборку контейнера в CI.** После реализации Dockerfile собирать образ с тегом SHA коммита, не заменяя проверки `tools/build`.
 

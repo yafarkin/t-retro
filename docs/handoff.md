@@ -13,8 +13,8 @@
 ## Текущее состояние
 
 - Этапы M0–M9 завершены. Локальный MVP проходит полную встречу от создания до `Closed` и сохранённого PDF.
-- macOS-скрипты и GitHub Actions реализованы, P3.4 отмечена выполненной. В репозитории только ветка `master`, она отслеживает `origin/master` в [GitHub](https://github.com/yafarkin/t-retro/tree/master).
-- Последний опубликованный коммит на момент снимка — `38819c6 Record successful GitHub Actions run`. [CI для этого SHA](https://github.com/yafarkin/t-retro/actions/runs/45231230315) завершён успешно.
+- Кроссплатформенные скрипты для macOS/Ubuntu и GitHub Actions реализованы, P3.4 отмечена выполненной. В репозитории только ветка `master`, она отслеживает `origin/master` в [GitHub](https://github.com/yafarkin/t-retro/tree/master).
+- Последний опубликованный план M10 — `8117263`. Первый CI для него упал только на ожидании сообщения M7, повторные macOS-попытки не получили runner и были отменены. Текущее изменение переводит CI на `ubuntu-latest` x86_64 и ещё не закоммичено. Предыдущий run `45231230315` для `38819c6` был успешным.
 - Текущая работа ограничивается детализацией [M10 в плане](tasks.md#этап-m10-проверка-mvp) и этим handoff. Реализация M10 ещё не начата, новых непроверенных функциональных изменений нет.
 - В `web/angular.json` сохранено `cli.analytics=false`: Angular CLI не должен спрашивать разрешение на телеметрию в интерактивном терминале.
 - Домашний путь пользователя удалён из README. Текущие документы не должны содержать локальные домашние пути, секреты или токены. Старая публичная Git-история не переписывалась.
@@ -46,10 +46,10 @@
 
 ### Инструменты и CI
 
-- [tools/build](../tools/build) проверяет macOS и точные версии .NET SDK, Node.js и npm, затем выполняет чистую сборку и все проверки. Совместим с Bash 3.2, Docker не нужен.
-- [tools/run](../tools/run) применяет миграции, запускает API и Angular, ждёт Ctrl+C и останавливает оба процесса. Проверен через псевдотерминал: URL поднялись, порты после Ctrl+C освобождены.
+- [tools/build](../tools/build) поддерживает macOS и Ubuntu, проверяет точные версии .NET SDK, Node.js и npm, затем выполняет чистую сборку и все проверки. Совместим с Bash 3.2, Docker не нужен. На Ubuntu Playwright ставит системные зависимости через `--with-deps`.
+- [tools/run](../tools/run) поддерживает macOS и Ubuntu, применяет миграции, запускает API и Angular, ждёт Ctrl+C и останавливает оба процесса. Проверен через псевдотерминал: URL поднялись, порты после Ctrl+C освобождены.
 - [web/playwright.config.ts](../web/playwright.config.ts) использует отдельную SQLite `.tools/e2e/t-retro.db`, не рабочую базу.
-- [.github/workflows/ci.yml](../.github/workflows/ci.yml) запускает тот же `tools/build` на `macos-latest` для push и pull request. Точная npm устанавливается отдельным шагом.
+- [.github/workflows/ci.yml](../.github/workflows/ci.yml) запускает тот же `tools/build` на `ubuntu-latest` x86_64 для push и pull request. Точная npm устанавливается отдельным шагом. macOS-runner был заменён из-за длинной очереди arm64.
 - Первый CI выявил npm 11.12.1 вместо 12.1.0; исправление проверено зелёными run `45230426865` и `45231230315`.
 
 ## Результаты последних проверок
@@ -115,7 +115,7 @@
 - [docs/tasks.md](tasks.md#этап-m10-проверка-mvp) — подробный план M10 и статусы P1–P4.
 - [docs/Retro_Spec.md](Retro_Spec.md#14-приёмка-и-самопроверка-постановки) — исходные приёмочные сценарии.
 - [README.md](../README.md) — версии, конфигурация, команды и результаты.
-- [tools/build](../tools/build), [tools/run](../tools/run) — стандартные локальные действия macOS.
+- [tools/build](../tools/build), [tools/run](../tools/run) — стандартные локальные действия macOS и Ubuntu.
 - [.github/workflows/ci.yml](../.github/workflows/ci.yml) — удалённый цикл.
 - [tests/Domain.Tests](../tests/Domain.Tests), [tests/Application.Tests](../tests/Application.Tests), [tests/Infrastructure.Tests](../tests/Infrastructure.Tests), [tests/Api.Tests](../tests/Api.Tests) — существующая основа M10.1–M10.3.
 - [web/e2e](../web/e2e) — девять существующих браузерных сценариев.

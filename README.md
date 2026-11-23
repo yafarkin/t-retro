@@ -59,7 +59,7 @@ PDF генерируется локально через PDFsharp без сет�
 
 ## Подготовка инструментов
 
-Скрипты macOS используют системную установку .NET SDK из `/usr/local/share/dotnet` или уже настроенный `DOTNET_ROOT`. Для ручных команд при необходимости задайте переменные окружения:
+Скрипты используют системную установку .NET SDK из `/usr/local/share/dotnet` или уже настроенный `DOTNET_ROOT`. Для ручных команд при необходимости задайте переменные окружения:
 
 ```bash
 export DOTNET_ROOT="/usr/local/share/dotnet"
@@ -72,7 +72,7 @@ export NUGET_PACKAGES="$PWD/.tools/nuget/packages"
 
 Docker на текущей машине отсутствует. Dockerfile и docker-compose можно подготовить на этапе P3, но локальные проверки не должны зависеть от Docker.
 
-## Скрипты macOS
+## Скрипты macOS и Ubuntu
 
 Из корня репозитория запустите:
 
@@ -81,11 +81,11 @@ Docker на текущей машине отсутствует. Dockerfile и do
 ./tools/run
 ```
 
-`tools/build` проверяет macOS, точные версии .NET SDK, Node.js и npm из `global.json`, `.nvmrc` и `web/package.json`. Затем выполняет restore, чистую сборку и тесты backend, `npm ci`, production build, unit-тесты frontend и все E2E. Playwright Chromium устанавливается в `.tools/playwright`, а E2E использует отдельную SQLite в `.tools/e2e`, не затрагивая рабочую базу. Скрипт совместим с системным Bash 3.2 и не требует Docker.
+`tools/build` поддерживает macOS и Ubuntu Linux. Он проверяет ОС и точные версии .NET SDK, Node.js и npm из `global.json`, `.nvmrc` и `web/package.json`. Затем выполняет restore, чистую сборку и тесты backend, `npm ci`, production build, unit-тесты frontend и все E2E. Playwright Chromium устанавливается в `.tools/playwright`; на Ubuntu системные зависимости устанавливаются через `playwright install --with-deps chromium`. E2E используют отдельную SQLite в `.tools/e2e`, не затрагивая рабочую базу. Скрипт совместим с системным Bash 3.2 и не требует Docker.
 
 `tools/run` требует предварительного успешного `tools/build`, применяет миграции и одновременно запускает API на `http://127.0.0.1:5166` и Angular на `http://127.0.0.1:4200`. Нажатие Ctrl+C останавливает оба процесса. Рабочая база остаётся в `src/Api/data/t-retro.db`.
 
-Тот же `tools/build` запускается в GitHub Actions из [.github/workflows/ci.yml](.github/workflows/ci.yml) на `macos-latest` для каждого push и pull request. Workflow использует `actions/setup-dotnet`, `actions/setup-node` и отдельно устанавливает npm 12.1.0. Секреты и внешняя БД для текущих SQLite-проверок не нужны. [Первый успешный запуск](https://github.com/yafarkin/t-retro/actions/runs/45230426865) подтвердил все шаги сборки и тестов.
+Тот же `tools/build` запускается в GitHub Actions из [.github/workflows/ci.yml](.github/workflows/ci.yml) на `ubuntu-latest` x86_64 для каждого push и pull request. Workflow использует `actions/setup-dotnet`, `actions/setup-node` и отдельно устанавливает npm 12.1.0. Секреты и внешняя БД для текущих SQLite-проверок не нужны. [Первый успешный запуск](https://github.com/yafarkin/t-retro/actions/runs/45230426865) подтвердил все шаги сборки и тестов на macOS; после перевода CI на Ubuntu требуется отдельная проверка нового runner.
 
 ## Ручной запуск
 

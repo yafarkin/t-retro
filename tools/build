@@ -4,8 +4,9 @@ set -euo pipefail
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT_DIR"
 
-if [[ $(uname -s) != "Darwin" ]]; then
-  echo "tools/build предназначен для macOS." >&2
+OS_NAME=$(uname -s)
+if [[ $OS_NAME != "Darwin" && $OS_NAME != "Linux" ]]; then
+  echo "tools/build поддерживает macOS и Ubuntu Linux." >&2
   exit 1
 fi
 
@@ -74,7 +75,11 @@ echo "==> Unit-тесты frontend"
 npm test --prefix web -- --watch=false
 
 echo "==> Установка Chromium для Playwright"
-(cd web && npx playwright install chromium)
+if [[ $OS_NAME == "Linux" ]]; then
+  (cd web && npx playwright install --with-deps chromium)
+else
+  (cd web && npx playwright install chromium)
+fi
 
 echo "==> E2E-тесты"
 rm -rf .tools/e2e
