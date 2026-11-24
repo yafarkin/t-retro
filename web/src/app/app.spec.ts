@@ -1,3 +1,4 @@
+import { provideHttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { provideEventPlugins } from '@taiga-ui/event-plugins';
@@ -7,7 +8,7 @@ describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideEventPlugins(), provideRouter([])],
+      providers: [provideEventPlugins(), provideHttpClient(), provideRouter([])],
     }).compileComponents();
   });
 

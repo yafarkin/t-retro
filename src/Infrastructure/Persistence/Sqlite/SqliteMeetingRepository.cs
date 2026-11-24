@@ -69,7 +69,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 Guid.Parse(row.MeetingId),
                 row.Name,
                 row.Color,
-                row.Position))
+                row.Position,
+                row.Description))
             .ToArray();
         var participants = (await connection.QueryAsync<ParticipantRow>(
             """
@@ -89,7 +90,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         var cards = (await connection.QueryAsync<CardRow>(
             """
             SELECT c.id AS Id, c.meeting_id AS MeetingId, c.column_id AS ColumnId,
-                   c.text AS Text, c.version AS Version, c.group_id AS GroupId,
+                   c.text AS Text, c.version AS Version, c.group_id AS GroupId, c.anonymous AS Anonymous,
                    c.created_at_utc AS CreatedAtUtc, c.updated_at_utc AS UpdatedAtUtc,
                    a.user_id AS AuthorId, u.display_name AS AuthorDisplayName
             FROM cards c
@@ -108,7 +109,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                     row.Version,
                     SqliteMapping.Time(row.CreatedAtUtc),
                     SqliteMapping.Time(row.UpdatedAtUtc),
-                    row.GroupId is null ? null : Guid.Parse(row.GroupId)),
+                    row.GroupId is null ? null : Guid.Parse(row.GroupId),
+                    row.Anonymous != 0),
                 Guid.Parse(row.AuthorId),
                 row.AuthorDisplayName))
             .ToArray();
@@ -361,6 +363,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 anonymous_cards = @AnonymousCards,
                 private_collection = @PrivateCollection,
                 anonymous_votes = @AnonymousVotes,
+                voting_enabled = @VotingEnabled,
                 vote_mode = @VoteMode,
                 vote_percent = @VotePercent,
                 vote_minimum = @VoteMinimum,
@@ -375,6 +378,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 AnonymousCards = meeting.AnonymousCards ? 1 : 0,
                 PrivateCollection = meeting.PrivateCollection ? 1 : 0,
                 AnonymousVotes = meeting.AnonymousVotes ? 1 : 0,
+                VotingEnabled = meeting.VotingEnabled ? 1 : 0,
                 VoteMode = meeting.VoteSettings.Mode.ToString(),
                 VotePercent = meeting.VoteSettings.Percent,
                 VoteMinimum = meeting.VoteSettings.Minimum,
@@ -816,8 +820,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
 
         await connection.ExecuteAsync(
             """
-            INSERT INTO cards (meeting_id, id, column_id, text, version, created_at_utc, updated_at_utc)
-            VALUES (@MeetingId, @Id, @ColumnId, @Text, @Version, @CreatedAtUtc, @UpdatedAtUtc);
+            INSERT INTO cards (meeting_id, id, column_id, text, version, created_at_utc, updated_at_utc, anonymous)
+            VALUES (@MeetingId, @Id, @ColumnId, @Text, @Version, @CreatedAtUtc, @UpdatedAtUtc, @Anonymous);
             """,
             new
             {
@@ -826,6 +830,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 ColumnId = card.ColumnId.ToString(),
                 card.Text,
                 card.Version,
+                Anonymous = card.Anonymous ? 1 : 0,
                 CreatedAtUtc = card.CreatedAtUtc.ToString("O"),
                 UpdatedAtUtc = card.UpdatedAtUtc.ToString("O"),
             },
@@ -872,7 +877,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             fingerprint,
             card.Id,
             newVersion,
-            card.CreatedAtUtc);
+            card.CreatedAtUtc,
+            anonymousCard: card.Anonymous);
         await transaction.CommitAsync(cancellationToken);
         return new MeetingCommandResult(MeetingCommandStatus.Success, newVersion, card.Id);
     }
@@ -1138,12 +1144,17 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             return new MeetingCommandResult(MeetingCommandStatus.VersionConflict);
         }
 
-        if (fromPhase == MeetingPhase.Group && toPhase == MeetingPhase.Vote)
+        if (fromPhase == MeetingPhase.Group)
+        {
+            await InitializeTopicsAsync(connection, transaction, meetingId);
+        }
+
+        if (toPhase == MeetingPhase.Vote)
         {
             await InitializeVotingAsync(connection, transaction, meetingId);
         }
 
-        if (fromPhase == MeetingPhase.Vote && toPhase == MeetingPhase.Discuss)
+        if (toPhase == MeetingPhase.Discuss)
         {
             await InitializeDiscussionAsync(connection, transaction, meetingId);
         }
@@ -1243,7 +1254,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             transaction);
     }
 
-    private static async Task InitializeVotingAsync(
+    private static async Task InitializeTopicsAsync(
         IDbConnection connection,
         IDbTransaction transaction,
         Guid meetingId)
@@ -1264,6 +1275,14 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             """,
             parameters,
             transaction);
+    }
+
+    private static async Task InitializeVotingAsync(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        Guid meetingId)
+    {
+        var parameters = new { MeetingId = meetingId.ToString() };
         await connection.ExecuteAsync(
             """
             INSERT INTO personal_ballots (meeting_id, user_id, version)
@@ -1395,15 +1414,16 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         string fingerprint,
         Guid? resultId,
         int resultVersion,
-        DateTimeOffset nowUtc) =>
+        DateTimeOffset nowUtc,
+        bool anonymousCard = false) =>
         await connection.ExecuteAsync(
             """
             INSERT INTO command_deduplication (
                 meeting_id, user_id, operation_id, operation_type, fingerprint,
-                result_id, result_version, created_at_utc)
+                result_id, result_version, created_at_utc, anonymous_card)
             VALUES (
                 @MeetingId, @UserId, @OperationId, @OperationType, @Fingerprint,
-                @ResultId, @ResultVersion, @CreatedAtUtc);
+                @ResultId, @ResultVersion, @CreatedAtUtc, @AnonymousCard);
             """,
             new
             {
@@ -1414,6 +1434,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 Fingerprint = fingerprint,
                 ResultId = resultId?.ToString(),
                 ResultVersion = resultVersion,
+                AnonymousCard = anonymousCard ? 1 : 0,
                 CreatedAtUtc = nowUtc.ToString("O"),
             },
             transaction);
@@ -1428,11 +1449,11 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             """
             INSERT INTO meetings (
                 id, name, phase, anonymous_cards, private_collection, anonymous_votes,
-                vote_mode, vote_percent, vote_minimum, vote_fixed, facilitator_id,
+                vote_mode, vote_percent, vote_minimum, vote_fixed, voting_enabled, facilitator_id,
                 invitation_version, version, board_version, created_at_utc, updated_at_utc)
             VALUES (
                 @Id, @Name, @Phase, @AnonymousCards, @PrivateCollection, @AnonymousVotes,
-                @VoteMode, @VotePercent, @VoteMinimum, @VoteFixed, @FacilitatorId,
+                @VoteMode, @VotePercent, @VoteMinimum, @VoteFixed, @VotingEnabled, @FacilitatorId,
                 @InvitationVersion, @Version, @BoardVersion, @CreatedAtUtc, @UpdatedAtUtc);
             """,
             new
@@ -1447,6 +1468,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 VotePercent = meeting.VoteSettings.Percent,
                 VoteMinimum = meeting.VoteSettings.Minimum,
                 VoteFixed = meeting.VoteSettings.Fixed,
+                VotingEnabled = meeting.VotingEnabled ? 1 : 0,
                 FacilitatorId = facilitatorId,
                 meeting.InvitationVersion,
                 meeting.Version,
@@ -1466,8 +1488,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         {
             await connection.ExecuteAsync(
                 """
-                INSERT INTO columns (meeting_id, id, name, color, position)
-                VALUES (@MeetingId, @Id, @Name, @Color, @Position);
+                INSERT INTO columns (meeting_id, id, name, color, position, description)
+                VALUES (@MeetingId, @Id, @Name, @Color, @Position, @Description);
                 """,
                 new
                 {
@@ -1476,6 +1498,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                     column.Name,
                     column.Color,
                     column.Position,
+                    column.Description,
                 },
                 transaction);
         }
@@ -1500,7 +1523,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             row.Version,
             row.BoardVersion,
             SqliteMapping.Time(row.CreatedAtUtc),
-            SqliteMapping.Time(row.UpdatedAtUtc));
+            SqliteMapping.Time(row.UpdatedAtUtc),
+            row.VotingEnabled != 0);
 
     private sealed class ElectionRow
     {
@@ -1518,6 +1542,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         public int AnonymousCards { get; init; }
         public int PrivateCollection { get; init; }
         public int AnonymousVotes { get; init; }
+        public int VotingEnabled { get; init; }
         public required string VoteMode { get; init; }
         public int VotePercent { get; init; }
         public int VoteMinimum { get; init; }
@@ -1537,6 +1562,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         public required string Id { get; init; }
         public required string Name { get; init; }
         public required string Color { get; init; }
+        public string? Description { get; init; }
         public int Position { get; init; }
     }
 
@@ -1585,6 +1611,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         public required string ColumnId { get; init; }
         public required string Text { get; init; }
         public int Version { get; init; }
+        public int Anonymous { get; init; }
         public string? GroupId { get; init; }
         public required string CreatedAtUtc { get; init; }
         public required string UpdatedAtUtc { get; init; }

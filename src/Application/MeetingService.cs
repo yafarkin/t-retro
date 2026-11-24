@@ -16,6 +16,8 @@ public sealed class MeetingService(
         int votePercent,
         int voteMinimum,
         int? fixedBudget,
+        bool votingEnabled,
+        bool startCollecting,
         CancellationToken cancellationToken)
     {
         var meetingId = Guid.NewGuid();
@@ -23,7 +25,7 @@ public sealed class MeetingService(
         var meeting = new Meeting(
             meetingId,
             RequiredText.Create(name, 120),
-            MeetingPhase.Draft,
+            startCollecting ? MeetingPhase.Collect : MeetingPhase.Draft,
             privacy.AnonymousCards,
             privacy.PrivateCollection,
             privacy.AnonymousVotes,
@@ -34,7 +36,8 @@ public sealed class MeetingService(
             1,
             1,
             now,
-            now);
+            now,
+            votingEnabled);
         var meetingColumns = CreateColumns(meetingId, columns);
         var creator = new MeetingMember(meetingId, userId, MemberStatus.Active, now, null);
         await meetings.CreateAsync(meeting, meetingColumns, creator, cancellationToken);
@@ -65,6 +68,7 @@ public sealed class MeetingService(
         int votePercent,
         int voteMinimum,
         int? fixedBudget,
+        bool? votingEnabled,
         CancellationToken cancellationToken)
     {
         var current = await access.GetAsync(userId, meetingId, true, cancellationToken);
@@ -80,6 +84,7 @@ public sealed class MeetingService(
             PrivateCollection = privacy.PrivateCollection,
             AnonymousVotes = privacy.AnonymousVotes,
             VoteSettings = ParseVoteSettings(voteMode, votePercent, voteMinimum, fixedBudget),
+            VotingEnabled = votingEnabled ?? current.Meeting.VotingEnabled,
             Version = current.Meeting.Version + 1,
             UpdatedAtUtc = DateTimeOffset.UtcNow,
         };
@@ -112,7 +117,7 @@ public sealed class MeetingService(
         return inputs.Select((input, position) =>
         {
             var (name, color) = ColumnRules.Validate(input.Name, input.Color);
-            return new MeetingColumn(Guid.NewGuid(), meetingId, name, color, position);
+            return new MeetingColumn(Guid.NewGuid(), meetingId, name, color, position, ColumnRules.Description(input.Description));
         }).ToArray();
     }
 

@@ -113,17 +113,21 @@ public sealed class SqliteMeetingCompletionRepository(
                 CreatedAtUtc = nowUtc.ToString("O"),
             },
             transaction);
-        if (current.Meeting.AnonymousCards)
-        {
-            await connection.ExecuteAsync(
-                "DELETE FROM card_authors WHERE meeting_id = @MeetingId;",
-                new { MeetingId = meetingId.ToString() },
-                transaction);
-            await connection.ExecuteAsync(
-                "DELETE FROM command_deduplication WHERE meeting_id = @MeetingId AND operation_type = 'CreateCard';",
-                new { MeetingId = meetingId.ToString() },
-                transaction);
-        }
+        var cardPrivacy = new { MeetingId = meetingId.ToString(), AllAnonymous = current.Meeting.AnonymousCards };
+        await connection.ExecuteAsync(
+            """
+            DELETE FROM card_authors WHERE meeting_id = @MeetingId
+              AND (@AllAnonymous OR card_id IN (SELECT id FROM cards WHERE meeting_id = @MeetingId AND anonymous = 1));
+            """,
+            cardPrivacy,
+            transaction);
+        await connection.ExecuteAsync(
+            """
+            DELETE FROM command_deduplication WHERE meeting_id = @MeetingId AND operation_type = 'CreateCard'
+              AND (@AllAnonymous OR anonymous_card = 1);
+            """,
+            cardPrivacy,
+            transaction);
 
         if (current.Meeting.AnonymousVotes)
         {

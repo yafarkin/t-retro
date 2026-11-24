@@ -18,12 +18,19 @@ test('M2 presence, live state, role transfer and access revocation synchronize c
 
   await login(first, origin, 'm2-first', 'Первый M2');
   await login(second, origin, 'm2-second', 'Второй M2');
-  await first.goto(`${origin}/meetings/new`);
-  await first.getByLabel('Название встречи').fill('Ретро M2 realtime');
-  await first.getByRole('button', { name: 'Создать встречу' }).click();
+  const draft = await firstContext.request.post(`${origin}/api/meetings`, {
+    data: {
+      name: 'Ретро M2 realtime',
+      columns: [{ name: 'Начать', color: '#36A269' }],
+    },
+  });
+  expect(draft.ok()).toBeTruthy();
+  const { id } = await draft.json();
+  await first.goto(`${origin}/meetings/${id}`);
   await expect(first.getByRole('heading', { name: 'Ретро M2 realtime', exact: true })).toBeVisible();
   await first.getByRole('button', { name: 'Показать приглашение' }).click();
   const invite = await first.getByLabel('Ссылка приглашения').inputValue();
+  await first.getByRole('button', { name: 'Закрыть приглашение' }).click();
 
   await second.goto(invite);
   await second.getByRole('button', { name: 'Вступить во встречу' }).click();

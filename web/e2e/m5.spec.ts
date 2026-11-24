@@ -11,6 +11,7 @@ async function login(page: Page, baseURL: string, subject: string, displayName: 
 
 async function addCard(page: Page, text: string): Promise<void> {
   const column = page.getByRole('region', { name: 'Начать', exact: true });
+  await column.getByRole('button', { name: 'Добавить карточку' }).click();
   await column.getByLabel('Новая карточка').fill(text);
   await column.getByRole('button', { name: 'Добавить карточку' }).click();
   await expect(column.getByText(text, { exact: true })).toBeVisible();
@@ -29,14 +30,19 @@ test('M5 topics, live votes, late budget, open breakdown and exclusion work in i
   await login(second, origin, 'm5-second', 'Второй M5');
   await login(late, origin, 'm5-late', 'Поздний M5');
   await first.goto(`${origin}/meetings/new`);
+  await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M5 голосование');
+  await first.getByRole('button', { name: 'Настройки ретро' }).click();
   await first.getByLabel('Скрывать индивидуальные голоса').uncheck();
-  await first.getByRole('button', { name: 'Создать встречу' }).click();
+  await first.getByRole('button', { name: 'Голосование', exact: true }).click();
+  await first.getByLabel('Распределение голосов').selectOption('percent');
+  await first.getByRole('button', { name: 'Сохранить настройки' }).click();
+  await first.getByRole('button', { name: 'Создать ретро', exact: true }).click();
   await first.getByRole('button', { name: 'Показать приглашение' }).click();
   const invite = await first.getByLabel('Ссылка приглашения').inputValue();
+  await first.getByRole('button', { name: 'Закрыть приглашение' }).click();
   await second.goto(invite);
   await second.getByRole('button', { name: 'Вступить во встречу' }).click();
-  await first.getByRole('button', { name: 'Начать сбор' }).click();
   await expect(second.getByText('Сбор карточек', { exact: true })).toBeVisible();
 
   await addCard(first, 'Первая M5');
@@ -93,7 +99,7 @@ test('M5 topics, live votes, late budget, open breakdown and exclusion work in i
   await expect(late.locator('.voting-summary')).toContainText('Осталось: 2');
   await expect(late.locator('.voting-summary')).toContainText('Исходных карточек: 3');
 
-  await first.getByLabel('Участник').selectOption({ label: 'Второй M5' });
+  await first.getByRole('combobox', { name: 'Участник', exact: true }).selectOption({ label: 'Второй M5' });
   first.once('dialog', (dialog) => dialog.accept());
   await first.getByRole('button', { name: 'Исключить', exact: true }).click();
   await expect(second.getByRole('heading', { name: 'Доступ к встрече закрыт' })).toBeVisible();

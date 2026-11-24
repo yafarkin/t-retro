@@ -15,6 +15,7 @@ public sealed class MeetingBoardService(
         Guid meetingId,
         Guid columnId,
         string? text,
+        bool anonymous,
         Guid operationId,
         CancellationToken cancellationToken)
     {
@@ -25,12 +26,12 @@ public sealed class MeetingBoardService(
             throw new NotFoundException("Колонка не найдена.");
         }
 
-        var card = Card.Create(Guid.NewGuid(), meetingId, columnId, text, timeProvider.GetUtcNow());
+        var card = Card.Create(Guid.NewGuid(), meetingId, columnId, text, timeProvider.GetUtcNow(), anonymous);
         var result = await meetings.CreateCardAsync(
             card,
             userId,
             operationId,
-            CommandFingerprint.Create(columnId, card.Text),
+            anonymous ? CommandFingerprint.Create(columnId, card.Text, anonymous) : CommandFingerprint.Create(columnId, card.Text),
             cancellationToken);
         return await CompleteAsync(meetingId, result, cancellationToken);
     }
@@ -116,7 +117,7 @@ public sealed class MeetingBoardService(
             throw new DomainValidationException("InvalidPhase", "Неизвестная фаза встречи.");
         }
 
-        await access.GetAsync(userId, meetingId, true, cancellationToken);
+        var snapshot = await access.GetAsync(userId, meetingId, true, cancellationToken);
         var fingerprint = CommandFingerprint.Create(parsedPhase, expectedVersion);
         var result = parsedPhase == MeetingPhase.Discuss
             ? await completion.CompleteAsync(
@@ -131,7 +132,7 @@ public sealed class MeetingBoardService(
                 meetingId,
                 userId,
                 parsedPhase,
-                MeetingPhaseRules.Next(parsedPhase),
+                MeetingPhaseRules.Next(parsedPhase, snapshot.Meeting.VotingEnabled),
                 expectedVersion,
                 operationId,
                 fingerprint,

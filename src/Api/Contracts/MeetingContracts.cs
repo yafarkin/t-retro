@@ -7,6 +7,8 @@ public sealed class ColumnRequest
     public string? Name { get; set; }
 
     public string? Color { get; set; }
+
+    public string? Description { get; set; }
 }
 
 public class VoteSettingsRequest
@@ -45,11 +47,18 @@ public class MeetingSettingsRequest
     public bool AnonymousVotes { get; set; } = true;
 
     public VoteSettingsRequest VoteSettings { get; set; } = new();
+
+    public bool? VotingEnabled { get; set; }
 }
 
 public sealed class UpdateMeetingSettingsRequest : MeetingSettingsRequest
 {
     public int ExpectedVersion { get; set; }
+}
+
+public sealed class CreateMeetingRequest : MeetingSettingsRequest
+{
+    public bool StartCollecting { get; set; }
 }
 
 public sealed record MeetingCreatedResponse(string Id, int Version);
@@ -70,7 +79,8 @@ public sealed record ColumnResponse(
     string Id,
     string Name,
     string Color,
-    int Position);
+    int Position,
+    string? Description);
 
 public sealed record ParticipantResponse(
     string Id,
@@ -189,6 +199,7 @@ public sealed record MeetingStateResponse(
     bool AnonymousCards,
     bool PrivateCollection,
     bool AnonymousVotes,
+    bool VotingEnabled,
     VoteSettingsResponse VoteSettings,
     IReadOnlyList<ColumnResponse> Columns,
     IReadOnlyList<ParticipantResponse> Participants,
@@ -300,6 +311,8 @@ public sealed class CreateCardRequest
     public Guid ColumnId { get; set; }
 
     public string? Text { get; set; }
+
+    public bool Anonymous { get; set; }
 
     public Guid OperationId { get; set; }
 }

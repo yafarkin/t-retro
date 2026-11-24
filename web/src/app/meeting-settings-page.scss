@@ -6,7 +6,6 @@
 
 header,
 .inline,
-.invite,
 .card-actions {
   display: flex;
   align-items: center;
@@ -38,16 +37,11 @@ section {
   color: var(--tui-status-positive);
 }
 
-.invite input,
 select {
   min-height: 2.75rem;
   padding: 0.5rem;
   border: 1px solid var(--tui-border-normal);
   border-radius: 0.5rem;
-}
-
-.invite input {
-  flex: 1 1 24rem;
 }
 
 .columns-preview {
@@ -189,12 +183,6 @@ select {
   border: 1px solid var(--tui-border-normal);
   border-radius: 0.5rem;
   font: inherit;
-}
-
-.readiness label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 .revoked {

@@ -22,7 +22,7 @@ public static class MeetingEndpoints
                 meeting.CreatedAtUtc)));
         });
         meetings.MapPost("/", async (
-            MeetingSettingsRequest request,
+            CreateMeetingRequest request,
             ClaimsPrincipal user,
             MeetingService service,
             CancellationToken cancellationToken) =>
@@ -36,6 +36,8 @@ public static class MeetingEndpoints
                 request.VoteSettings.Percent,
                 request.VoteSettings.Minimum,
                 request.VoteSettings.Fixed,
+                request.VotingEnabled ?? true,
+                request.StartCollecting,
                 cancellationToken);
             return Results.Created(
                 $"/api/meetings/{snapshot.Meeting.Id}",
@@ -79,6 +81,7 @@ public static class MeetingEndpoints
                 request.VoteSettings.Percent,
                 request.VoteSettings.Minimum,
                 request.VoteSettings.Fixed,
+                request.VotingEnabled,
                 cancellationToken);
             return Results.Ok(ApiMappings.ToResponse(snapshot));
         });

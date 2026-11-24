@@ -1,0 +1,30 @@
+.meeting-dialog {
+  box-sizing: border-box;
+  width: min(calc(100vw - 1.5rem), 36rem);
+  max-width: none;
+  max-height: calc(100dvh - 1.5rem);
+  padding: clamp(1rem, 3vw, 1.75rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.meeting-dialog::backdrop {
+  background: #0006;
+}
+
+.meeting-dialog-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.meeting-dialog-heading h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}

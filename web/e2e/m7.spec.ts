@@ -9,103 +9,88 @@ async function login(page: Page, baseURL: string, subject: string, displayName: 
   await expect(page.getByRole('heading', { name: 'Мои встречи' })).toBeVisible();
 }
 
-async function installAudioCounter(context: BrowserContext): Promise<void> {
+async function watchAudio(context: BrowserContext): Promise<void> {
   await context.addInitScript(() => {
-    const target = window as unknown as { __timerBeeps: number; AudioContext: unknown };
-    target.__timerBeeps = 0;
+    const target = window as unknown as { audioStarts: number; AudioContext: unknown };
+    target.audioStarts = 0;
     target.AudioContext = class {
-      readonly currentTime = 0;
-      readonly destination = {};
-      async resume(): Promise<void> {}
-      async close(): Promise<void> {}
-      createOscillator() {
-        return {
-          type: 'sine',
-          frequency: { value: 0 },
-          connect: () => undefined,
-          start: () => { target.__timerBeeps += 1; },
-          stop: () => undefined,
-        };
+      constructor() {
+        target.audioStarts++;
       }
     };
   });
 }
 
-async function beepCount(page: Page): Promise<number> {
-  return page.evaluate(() => (window as unknown as { __timerBeeps: number }).__timerBeeps);
+async function startTimer(page: Page, minutes: string): Promise<void> {
+  await page.getByRole('button', { name: 'Настроить таймер' }).click();
+  await page.getByLabel('Минуты').fill(minutes);
+  await page.getByRole('button', { name: 'Запустить таймер' }).click();
 }
 
-async function resetBeeps(page: Page): Promise<void> {
-  await page.evaluate(() => { (window as unknown as { __timerBeeps: number }).__timerBeeps = 0; });
-}
-
-test('M7 timer countdown, expiration, sound coordination and reconnect work across contexts and tabs', async ({ browser, baseURL }) => {
+test('M7 silent timer countdown and expiration synchronize across contexts and tabs', async ({ browser, baseURL }) => {
   const origin = baseURL!;
   const firstContext = await browser.newContext();
   const secondContext = await browser.newContext();
-  await installAudioCounter(firstContext);
-  await installAudioCounter(secondContext);
+  await watchAudio(firstContext);
+  await watchAudio(secondContext);
   const first = await firstContext.newPage();
   const second = await secondContext.newPage();
 
   await login(first, origin, 'm7-first', 'Первый M7');
   await login(second, origin, 'm7-second', 'Второй M7');
   await first.goto(`${origin}/meetings/new`);
+  await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M7 таймер');
-  await first.getByRole('button', { name: 'Создать встречу' }).click();
+  await first.getByRole('button', { name: 'Создать ретро', exact: true }).click();
   await expect(first.getByRole('heading', { name: 'Ретро M7 таймер' })).toBeVisible();
   const meetingUrl = first.url();
   await first.getByRole('button', { name: 'Показать приглашение' }).click();
   const invite = await first.getByLabel('Ссылка приглашения').inputValue();
+  await first.getByRole('button', { name: 'Закрыть приглашение' }).click();
   await second.goto(invite);
   await second.getByRole('button', { name: 'Вступить во встречу' }).click();
-  await first.getByRole('button', { name: 'Начать сбор' }).click();
   await expect(second.getByText('Сбор карточек', { exact: true })).toBeVisible();
   const firstTab = await firstContext.newPage();
   await firstTab.goto(meetingUrl);
   await expect(firstTab.getByRole('heading', { name: 'Ретро M7 таймер' })).toBeVisible();
 
+  await first.getByRole('button', { name: 'Настроить таймер' }).click();
+  const timer = first.getByRole('dialog', { name: 'Длительность таймера' });
+  await expect(timer.getByRole('button', { name: /^(1|5|10|15|30|60) мин$/ })).toHaveCount(6);
+  await timer.getByRole('button', { name: '1 мин', exact: true }).click();
+  await timer.getByRole('button', { name: 'Запустить таймер' }).click();
   for (const page of [first, firstTab, second]) {
-    await page.getByRole('button', { name: 'Проверить звук' }).click();
-    await expect(page.getByText('Звук включён', { exact: true })).toBeVisible();
-    await resetBeeps(page);
+    await expect(page.locator('.timer-countdown')).toHaveText(/^(00:[0-5]\d|01:00)$/);
   }
 
-  await first.getByLabel('Секунды таймера').fill('60');
-  await first.getByRole('button', { name: 'Запустить таймер' }).click();
-  await expect(second.locator('.timer-section')).toContainText(/Осталось: \d{2}:\d{2}/);
-  await expect(firstTab.locator('.timer-section')).toContainText(/Осталось: \d{2}:\d{2}/);
-  await first.getByLabel('Секунды таймера').fill('30');
+  await first.getByRole('button', { name: 'Управление таймером' }).click();
+  await first.getByLabel('Минуты').fill('0.5');
   await first.getByRole('button', { name: 'Добавить время' }).click();
   await expect(first.getByText('Время добавлено.', { exact: true })).toBeVisible();
+  await first.getByRole('button', { name: 'Управление таймером' }).click();
   await first.getByRole('button', { name: 'Остановить таймер' }).click();
-  await expect(second.locator('.timer-section')).toContainText('Таймер не запущен.');
+  await expect(second.locator('.timer-countdown')).toHaveCount(0);
   await expect(first.getByText('Время вышло', { exact: true })).toHaveCount(0);
   await expect(second.getByText('Время вышло', { exact: true })).toHaveCount(0);
-  expect(await beepCount(first)).toBe(0);
-  expect(await beepCount(firstTab)).toBe(0);
-  expect(await beepCount(second)).toBe(0);
 
-  await first.getByLabel('Секунды таймера').fill('1');
-  await first.getByRole('button', { name: 'Запустить таймер' }).click();
+  await startTimer(first, '0.02');
   for (const page of [first, firstTab, second]) {
     await expect(page.getByText('Время вышло', { exact: true })).toBeVisible({ timeout: 10_000 });
+    expect(await page.evaluate(() => (window as unknown as { audioStarts: number }).audioStarts)).toBe(0);
   }
-  expect(await beepCount(first) + await beepCount(firstTab)).toBe(1);
-  expect(await beepCount(second)).toBe(1);
 
   const reconnectedTab = await firstContext.newPage();
   await reconnectedTab.goto(meetingUrl);
   await expect(reconnectedTab.getByRole('heading', { name: 'Ретро M7 таймер' })).toBeVisible();
   await expect(reconnectedTab.getByText('Время вышло', { exact: true })).toHaveCount(0);
-  await expect(reconnectedTab.locator('.timer-section')).toContainText('Таймер не запущен.');
+  await expect(reconnectedTab.locator('.timer-countdown')).toHaveCount(0);
 
-  await first.getByLabel('Секунды таймера').fill('5');
-  await first.getByRole('button', { name: 'Запустить таймер' }).click();
+  await startTimer(first, '0.1');
+  await expect(first.locator('.timer-countdown')).toBeVisible();
   await expect(first.getByText('Время вышло', { exact: true })).toHaveCount(0);
   await first.getByRole('button', { name: 'Перейти к группировке' }).click();
-  await expect(second.locator('.timer-section')).toContainText('Таймер не запущен.');
-  await expect(second.getByText('Время вышло', { exact: true })).toHaveCount(1);
+  await expect(second.locator('.timer-countdown')).toHaveCount(0);
+  await expect(second.getByText('Время вышло', { exact: true })).toHaveCount(0);
 
   await Promise.all([firstContext, secondContext].map(closeContextGracefully));
 });

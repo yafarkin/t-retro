@@ -1,29 +1,70 @@
-<div class="columns">
-  @for (column of columns(); track $index) {
-    <div class="column-row">
-      <tui-textfield>
+<div class="columns" [class.column-cards]="cards()" cdkDropList cdkDropListOrientation="horizontal"
+  [cdkDropListDisabled]="!cards()" (cdkDropListDropped)="drop($event)">
+  @for (column of columns(); track column) {
+    @let nameError = showErrors() ? columnNameError(column.name) : null;
+    @let descriptionError = showErrors() ? columnDescriptionError(column.description) : null;
+    <div class="column-row" [style.--column-color]="column.color" cdkDrag
+      [cdkDragDisabled]="!cards()" cdkDragPreviewContainer="parent">
+      <div class="column-title">
+        <div class="column-name">
+          <tui-textfield [class.field-invalid]="nameError">
+            <input
+              #columnName
+              tuiTextfield
+              aria-label="Название колонки"
+              [name]="'column-name-' + $index"
+              [ngModelOptions]="{ standalone: cards() }"
+              [(ngModel)]="column.name"
+              [attr.aria-invalid]="nameError ? true : null"
+              [attr.aria-describedby]="nameError ? 'column-name-error-' + $index : null"
+              placeholder="Название колонки"
+              required
+              maxlength="120" />
+          </tui-textfield>
+          @if (nameError) {
+            <p class="field-error" [id]="'column-name-error-' + $index" role="alert">{{ nameError }}</p>
+          }
+        </div>
+        @if (cards()) {
+          <button #dragHandle class="drag-grip" cdkDragHandle type="button" aria-keyshortcuts="ArrowLeft ArrowRight"
+            [attr.aria-label]="'Переместить колонку ' + (column.name || ($index + 1))"
+            title="Перетащить колонку или переместить клавишами со стрелками"
+            (keydown.arrowleft)="moveByKeyboard($event, $index, -1)"
+            (keydown.arrowright)="moveByKeyboard($event, $index, 1)"><span aria-hidden="true">⠿</span></button>
+        }
+      </div>
+      <div class="column-details">
+        <textarea class="column-description" [class.field-invalid]="descriptionError" aria-label="Описание колонки"
+          placeholder="Описание (необязательно)" [name]="'column-description-' + $index"
+          [ngModelOptions]="{ standalone: cards() }" [(ngModel)]="column.description"
+          [attr.aria-invalid]="descriptionError ? true : null"
+          [attr.aria-describedby]="descriptionError ? 'column-description-error-' + $index : null"
+          rows="2" maxlength="400"></textarea>
+        @if (descriptionError) {
+          <p class="field-error" [id]="'column-description-error-' + $index" role="alert">{{ descriptionError }}</p>
+        }
+      </div>
+      <div class="color-field">
         <input
-          tuiTextfield
-          aria-label="Название колонки"
-          [name]="'column-name-' + $index"
-          [(ngModel)]="column.name"
+          class="color"
+          type="color"
+          aria-label="Цвет колонки"
+          [name]="'column-color-' + $index"
+          [ngModelOptions]="{ standalone: cards() }"
+          [(ngModel)]="column.color"
           required
-          maxlength="120" />
-      </tui-textfield>
-      <input
-        class="color"
-        type="color"
-        aria-label="Цвет колонки"
-        [name]="'column-color-' + $index"
-        [(ngModel)]="column.color"
-        required
-        pattern="#[0-9A-Fa-f]{6}" />
+          pattern="#[0-9A-Fa-f]{6}" />
+      </div>
       <div class="actions">
-        <button tuiButton type="button" appearance="secondary" aria-label="Переместить выше" (click)="move($index, -1)" [disabled]="$first">↑</button>
-        <button tuiButton type="button" appearance="secondary" aria-label="Переместить ниже" (click)="move($index, 1)" [disabled]="$last">↓</button>
-        <button tuiButton type="button" appearance="secondary" aria-label="Удалить колонку" (click)="remove($index)">Удалить</button>
+        @if (!cards()) {
+          <button tuiButton type="button" appearance="secondary" aria-label="Переместить выше" (click)="move($index, -1)" [disabled]="$first">↑</button>
+          <button tuiButton type="button" appearance="secondary" aria-label="Переместить ниже" (click)="move($index, 1)" [disabled]="$last">↓</button>
+        }
+        <button tuiButton type="button" appearance="secondary" [size]="cards() ? 's' : 'm'" aria-label="Удалить колонку" (click)="remove($index)" [disabled]="cards() && $first && $last">Удалить</button>
       </div>
     </div>
   }
 </div>
-<button tuiButton type="button" appearance="secondary" (click)="add()">Добавить колонку</button>
+<div class="column-tools" [class.column-tools-end]="cards()">
+  <button tuiButton type="button" appearance="secondary" (click)="add()">Добавить колонку</button>
+</div>

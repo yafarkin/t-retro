@@ -1,0 +1,124 @@
+<header class="heading">
+  <button tuiButton appearance="secondary" size="s" type="button" [disabled]="busy()"
+    (click)="changeTemplate.emit()">← К шаблонам</button>
+  <h1 #heading tabindex="-1">Новое ретро</h1>
+</header>
+
+<form class="confirmation" (ngSubmit)="submit()">
+  <label for="retro-name">Название встречи</label>
+  <tui-textfield [class.field-invalid]="nameError()">
+    <input id="retro-name" tuiTextfield name="name" [(ngModel)]="name" maxlength="120" required
+      [attr.aria-invalid]="nameError() ? true : null" [attr.aria-describedby]="nameError() ? 'retro-name-error' : null" />
+  </tui-textfield>
+  @if (nameError(); as message) {
+    <p id="retro-name-error" class="field-error" role="alert">{{ message }}</p>
+  }
+
+  <section class="template-preview" aria-labelledby="setup-template">
+    <h2 id="setup-template">Шаблон ретро</h2>
+    <p class="muted">{{ templateName() }}</p>
+    <ul class="preview-columns" aria-label="Колонки ретро">
+      @for (column of columns(); track $index) {
+        <li>
+          <strong class="column-label" [style.--column-color]="column.color">{{ column.name }}</strong>
+          @if (column.description; as description) {
+            <p class="column-description">{{ description }}</p>
+          }
+        </li>
+      }
+    </ul>
+
+    <div class="template-actions">
+      <button tuiButton appearance="secondary" type="button" [disabled]="busy()" (click)="editColumns()">Изменить колонки</button>
+      <button tuiButton appearance="secondary" type="button" [disabled]="busy()" (click)="changeTemplate.emit()">Сменить шаблон</button>
+    </div>
+  </section>
+
+  <button class="settings-button" tuiButton appearance="secondary" type="button" [disabled]="busy()"
+    (click)="editSettings()">Настройки ретро</button>
+  @if (error(); as message) {
+    <p class="field-error" role="alert">{{ message }}</p>
+  }
+  <button class="create-button" tuiButton type="submit" [disabled]="busy()">
+    {{ busy() ? 'Создаём ретро…' : 'Создать ретро' }}
+  </button>
+</form>
+
+<dialog #modal [class.wide]="activeDialog() === 'columns'" aria-labelledby="setup-dialog-title"
+  (cancel)="close($event)">
+  @if (activeDialog(); as current) {
+    <header class="dialog-header">
+      <h2 #modalHeading id="setup-dialog-title" tabindex="-1">{{ current === 'columns' ? 'Изменить колонки' : 'Настройки ретро' }}</h2>
+      <button tuiButton appearance="secondary" size="s" type="button" aria-label="Закрыть окно" (click)="close()">×</button>
+    </header>
+
+    @if (current === 'columns') {
+      <form (ngSubmit)="saveColumns()">
+        <app-columns-editor [cards]="true" [showErrors]="columnsAttempted()" [(columns)]="draftColumns" />
+        <footer>
+          <button tuiButton appearance="secondary" type="button" (click)="close()">Отмена</button>
+          <button tuiButton type="submit">Сохранить колонки</button>
+        </footer>
+      </form>
+    } @else {
+      <div class="settings-tabs" role="group" aria-label="Разделы настроек">
+        <button type="button" [attr.aria-pressed]="tab() === 'visibility'" (click)="tab.set('visibility')">Видимость</button>
+        <button type="button" [attr.aria-pressed]="tab() === 'voting'" (click)="tab.set('voting')">Голосование</button>
+      </div>
+
+      <form (ngSubmit)="saveSettings()">
+        @if (tab() === 'visibility') {
+          <label class="setting-row">
+            <span><strong>Закрытый сбор</strong><small>Чужие карточки видны как заглушки до группировки.</small></span>
+            <input type="checkbox" role="switch" aria-label="Закрытый сбор" name="privateCollection" [(ngModel)]="draftOptions().privateCollection" />
+          </label>
+          <label class="setting-row">
+            <span><strong>Скрывать авторов карточек</strong><small>Имена авторов всех карточек останутся скрытыми после сбора.</small></span>
+            <input type="checkbox" role="switch" aria-label="Скрывать авторов карточек" name="anonymousCards" [(ngModel)]="draftOptions().anonymousCards" />
+          </label>
+          <label class="setting-row">
+            <span><strong>Скрывать индивидуальные голоса</strong><small>Участникам видны общие суммы голосов по темам.</small></span>
+            <input type="checkbox" role="switch" aria-label="Скрывать индивидуальные голоса" name="anonymousVotes" [(ngModel)]="draftOptions().anonymousVotes" />
+          </label>
+        } @else {
+          <label class="setting-row">
+            <span><strong>Включить голосование</strong><small>Участники голосуют за темы после группировки.</small></span>
+            <input type="checkbox" role="switch" aria-label="Включить голосование" name="votingEnabled" [(ngModel)]="draftOptions().votingEnabled" />
+          </label>
+          @if (draftOptions().votingEnabled) {
+            <div class="vote-fields">
+              @if (draftOptions().voteSettings.mode === 'fixed') {
+                <label>Голосов на человека
+                  <input type="number" name="fixed" min="1" max="2147483647" step="1" required [(ngModel)]="draftOptions().voteSettings.fixed" />
+                </label>
+              }
+              <label>Распределение голосов
+                <select name="voteMode" [ngModel]="draftOptions().voteSettings.mode" (ngModelChange)="setVoteMode($event)">
+                  <option value="fixed">Фиксированный бюджет на все колонки</option>
+                  <option value="percent">Процент от числа карточек</option>
+                </select>
+              </label>
+              @if (draftOptions().voteSettings.mode === 'percent') {
+                <label>Процент голосов
+                  <input type="number" name="percent" min="0" max="100" step="1" required [(ngModel)]="draftOptions().voteSettings.percent" />
+                </label>
+                <label>Минимум голосов
+                  <input type="number" name="minimum" min="1" max="2147483647" step="1" required [(ngModel)]="draftOptions().voteSettings.minimum" />
+                </label>
+              }
+            </div>
+          } @else {
+            <p class="muted">После группировки встреча перейдёт сразу к обсуждению.</p>
+          }
+          @if (voteError(); as message) {
+            <p class="field-error" role="alert">{{ message }}</p>
+          }
+        }
+        <footer>
+          <button tuiButton appearance="secondary" type="button" (click)="close()">Отмена</button>
+          <button tuiButton type="submit">Сохранить настройки</button>
+        </footer>
+      </form>
+    }
+  }
+</dialog>

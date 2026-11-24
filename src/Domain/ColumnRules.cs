@@ -4,6 +4,9 @@ namespace Domain;
 
 public static partial class ColumnRules
 {
+    public static string? Description(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : RequiredText.Create(value, 400);
+
     public static (string Name, string Color) Validate(string? name, string? color)
     {
         var normalizedName = RequiredText.Create(name, 120);

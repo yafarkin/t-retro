@@ -11,6 +11,7 @@ async function login(page: Page, baseURL: string, subject: string, displayName: 
 
 async function addCard(page: Page, columnName: string, text: string): Promise<void> {
   const column = page.getByRole('region', { name: columnName, exact: true });
+  await column.getByRole('button', { name: 'Добавить карточку' }).click();
   await column.getByLabel('Новая карточка').fill(text);
   await column.getByRole('button', { name: 'Добавить карточку' }).click();
   await expect(column.getByText(text, { exact: true })).toBeVisible();
@@ -35,13 +36,14 @@ test('M6 ranked queue, shared navigation, decisions, comments and actions work i
   await login(first, origin, 'm6-first', 'Первый M6');
   await login(second, origin, 'm6-second', 'Второй M6');
   await first.goto(`${origin}/meetings/new`);
+  await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M6 обсуждение');
-  await first.getByRole('button', { name: 'Создать встречу' }).click();
+  await first.getByRole('button', { name: 'Создать ретро', exact: true }).click();
   await first.getByRole('button', { name: 'Показать приглашение' }).click();
   const invite = await first.getByLabel('Ссылка приглашения').inputValue();
+  await first.getByRole('button', { name: 'Закрыть приглашение' }).click();
   await second.goto(invite);
   await second.getByRole('button', { name: 'Вступить во встречу' }).click();
-  await first.getByRole('button', { name: 'Начать сбор' }).click();
   await expect(second.getByText('Сбор карточек', { exact: true })).toBeVisible();
   await addCard(first, 'Начать', 'Тема A');
   await addCard(first, 'Перестать', 'Тема B');

@@ -8,7 +8,8 @@ public sealed record Card(
     int Version,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc,
-    Guid? GroupId = null)
+    Guid? GroupId = null,
+    bool Anonymous = false)
 {
     public const int MaxTextLength = 4000;
 
@@ -17,7 +18,8 @@ public sealed record Card(
         Guid meetingId,
         Guid columnId,
         string? text,
-        DateTimeOffset nowUtc) =>
+        DateTimeOffset nowUtc,
+        bool anonymous = false) =>
         new(
             id,
             meetingId,
@@ -25,7 +27,8 @@ public sealed record Card(
             RequiredText.Create(text, MaxTextLength),
             1,
             nowUtc,
-            nowUtc);
+            nowUtc,
+            Anonymous: anonymous);
 
     public Card UpdateText(string? text, DateTimeOffset nowUtc) =>
         this with

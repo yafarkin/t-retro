@@ -54,7 +54,7 @@ public sealed class CompletionApiTests
         Assert.Equal(3, closed.Topics.Single(topic => topic.Id == setup.GroupTopicId).TotalVotes);
         Assert.Contains(closed.Topics, topic => topic.TotalVotes == 0);
         Assert.All(closed.Cards, card => Assert.False(card.IsHidden));
-        Assert.All(closed.Cards, card => Assert.Equal(anonymousCards, card.AuthorId is null));
+        Assert.All(closed.Cards, card => Assert.Equal(anonymousCards || card.Text == "Карточка участника", card.AuthorId is null));
         var voters = closed.Topics.Single(topic => topic.Id == setup.GroupTopicId).Voters;
         Assert.Equal(anonymousVotes, voters is null);
         if (!anonymousVotes)
@@ -62,10 +62,10 @@ public sealed class CompletionApiTests
             Assert.Equal(3, voters!.Sum(vote => vote.Count));
         }
 
-        Assert.Equal(anonymousCards ? 0 : 3, await CountAsync(factory.DatabasePath, "card_authors"));
+        Assert.Equal(anonymousCards ? 0 : 2, await CountAsync(factory.DatabasePath, "card_authors"));
         Assert.Equal(anonymousVotes ? 0 : 3, await CountAsync(factory.DatabasePath, "votes"));
         Assert.Equal(anonymousVotes ? 0 : 3, await CountAsync(factory.DatabasePath, "personal_ballots"));
-        Assert.Equal(anonymousCards ? 0 : 3, await CountAsync(
+        Assert.Equal(anonymousCards ? 0 : 2, await CountAsync(
             factory.DatabasePath,
             "command_deduplication",
             "operation_type = 'CreateCard'"));
@@ -76,7 +76,7 @@ public sealed class CompletionApiTests
         Assert.Equal(3, await CountAsync(factory.DatabasePath, "members"));
         Assert.Equal(1, await CountAsync(factory.DatabasePath, "actions"));
         var payload = JsonSerializer.Deserialize<MeetingStateData>(await PayloadAsync(factory.DatabasePath))!;
-        Assert.All(payload.Cards, card => Assert.Equal(anonymousCards, card.AuthorId is null));
+        Assert.All(payload.Cards, card => Assert.Equal(anonymousCards || card.Card.Anonymous, card.AuthorId is null));
         Assert.Equal(anonymousVotes ? 0 : 3, payload.Votes.Count);
         Assert.Empty(payload.Ballots);
         Assert.Empty(payload.ReadyUserIds);
@@ -105,6 +105,7 @@ public sealed class CompletionApiTests
             Assert.Contains("Задача после ретро", text);
             Assert.Contains("обсуждена", text);
             Assert.Equal(anonymousCards, !text.Contains("Автор:"));
+            Assert.DoesNotContain("Автор: Участник", text);
             Assert.Equal(anonymousVotes, !text.Contains("Голос:"));
         }
 
@@ -259,10 +260,19 @@ public sealed class CompletionApiTests
             created.Id,
             collected.Columns[0].Id,
             facilitatorCardText ?? "Основная тема");
-        var memberCard = await CreateCardAsync(member, created.Id, collected.Columns[0].Id, "Карточка участника");
+        var memberCard = await CreateCardAsync(member, created.Id, collected.Columns[0].Id, "Карточка участника", anonymous: true);
         var excludedCard = await CreateCardAsync(excluded, created.Id, collected.Columns[1].Id, "Нулевая тема");
+        var deletedCard = await CreateCardAsync(member, created.Id, collected.Columns[0].Id, "Удалённая анонимная карточка", anonymous: true);
+        (await member.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"/api/meetings/{created.Id}/cards/{deletedCard}")
+        {
+            Content = JsonContent.Create(new DeleteCardRequest { ExpectedVersion = 1 }),
+        })).EnsureSuccessStatusCode();
         await AdvanceAsync(facilitator, created.Id, "Collect");
         var grouped = await StateAsync(facilitator, created.Id);
+        var revealedAnonymous = grouped.Cards.Single(card => card.Id == memberCard);
+        Assert.Equal("Карточка участника", revealedAnonymous.Text);
+        Assert.Null(revealedAnonymous.AuthorId);
+        Assert.Null(revealedAnonymous.AuthorDisplayName);
         (await facilitator.PostAsJsonAsync($"/api/meetings/{created.Id}/moves", new MoveCardRequest
         {
             SourceKind = "card",
@@ -348,12 +358,13 @@ public sealed class CompletionApiTests
         AdvanceMeetingRequest request) =>
         client.PostAsJsonAsync($"/api/meetings/{meetingId}/advance", request);
 
-    private static async Task<string> CreateCardAsync(HttpClient client, string meetingId, string columnId, string text)
+    private static async Task<string> CreateCardAsync(HttpClient client, string meetingId, string columnId, string text, bool anonymous = false)
     {
         var response = await client.PostAsJsonAsync($"/api/meetings/{meetingId}/cards", new CreateCardRequest
         {
             ColumnId = Guid.Parse(columnId),
             Text = text,
+            Anonymous = anonymous,
             OperationId = Guid.NewGuid(),
         });
         response.EnsureSuccessStatusCode();

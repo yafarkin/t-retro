@@ -10,12 +10,19 @@
     @if (loading()) {
       <p>Загружаем встречу…</p>
     } @else if (state(); as meeting) {
-      <header>
+      <header class="meeting-header">
         <div>
           <p class="eyebrow">{{ phaseLabel(meeting.phase) }}</p>
           <h1>{{ meeting.name }}</h1>
         </div>
-        <span>Версия {{ meeting.version }}</span>
+        @if (meeting.canManage && meeting.phase !== 'Closed') {
+          <div class="facilitator-actions inline">
+            <app-meeting-invite [meetingId]="meeting.id" [disabled]="commandsBlocked()" />
+            <button tuiButton type="button" size="s" (click)="advance()" [disabled]="commandsBlocked()">
+              {{ advanceLabel(meeting.phase, meeting.votingEnabled !== false) }}
+            </button>
+          </div>
+        }
       </header>
 
       @if (sync.connectionState() !== 'connected') {
@@ -28,58 +35,38 @@
         <p class="notice" role="status">{{ message }}</p>
       }
 
-      @if (meeting.canManage && meeting.phase !== 'Closed') {
-        <section class="facilitator-actions">
-          <h2>Действия фасилитатора</h2>
-          <button tuiButton type="button" (click)="advance()" [disabled]="commandsBlocked()">{{ advanceLabel(meeting.phase) }}</button>
-        </section>
-      }
-
-      @if (meeting.readiness; as readiness) {
-        <section class="readiness">
-          <h2>{{ readinessText() }}</h2>
-          <label>
-            <input
-              type="checkbox"
-              [ngModel]="readiness.myReady"
-              (ngModelChange)="setReady($event)"
-              [disabled]="commandsBlocked()" />
-            Я готов
-          </label>
-          <p class="hint">Фаза не изменится автоматически. Переход выполняет фасилитатор.</p>
-        </section>
-      }
-
       @if (isTimerPhase(meeting.phase)) {
-        <section class="timer-section">
-          <h2>Таймер</h2>
-          @if (sync.expired(); as expired) {
-            <p class="error" role="alert"><span>Время вышло</span> <button tuiButton type="button" size="s" appearance="secondary" (click)="sync.dismissExpired()">Скрыть</button></p>
-          }
-          <div class="inline">
-            <button tuiButton type="button" size="s" appearance="secondary" (click)="sync.sound.enableAndTest()">Проверить звук</button>
-            @if (sync.sound.enabled()) { <span class="notice">Звук включён</span> }
+        <div class="meeting-toolbar">
+          <div class="presence-stack" role="group" aria-label="Участники встречи">
+            @for (participant of activeParticipants().slice(0, 6); track participant.id) {
+              <span class="participant-avatar" [class.online]="participant.isOnline"
+                [title]="participant.displayName">{{ participant.displayName.trim().slice(0, 1).toUpperCase() }}</span>
+            }
+            @if (activeParticipants().length > 6) {
+              <span class="participant-avatar">+{{ activeParticipants().length - 6 }}</span>
+            }
           </div>
-          @if (sync.sound.error()) {
-            <p class="error" role="alert">Браузер не разрешил звук. Визуальное оповещение продолжит работать.</p>
-          }
-          @if (meeting.timer) {
-            <p class="budget-numbers"><strong>Осталось: {{ formatTimer(sync.timerRemaining() ?? 0) }}</strong></p>
-          } @else {
-            <p class="hint">Таймер не запущен.</p>
-          }
-          @if (meeting.canManage) {
-            <div class="vote-settings">
-              <label>Секунды <input type="number" aria-label="Секунды таймера" name="timerSeconds" min="1" required [(ngModel)]="timerSeconds" /></label>
-              @if (meeting.timer) {
-                <button tuiButton type="button" size="s" (click)="addTimer()" [disabled]="commandsBlocked()">Добавить время</button>
-                <button tuiButton type="button" size="s" appearance="secondary" (click)="stopTimer()" [disabled]="commandsBlocked()">Остановить таймер</button>
-              } @else {
-                <button tuiButton type="button" size="s" (click)="startTimer()" [disabled]="timerSeconds() <= 0 || commandsBlocked()">Запустить таймер</button>
-              }
+          @if (meeting.readiness; as readiness) {
+            <div class="readiness-control">
+              <label>
+                <input type="checkbox" [ngModel]="readiness.myReady" (ngModelChange)="setReady($event)"
+                  [disabled]="commandsBlocked()" />
+                Я готов
+              </label>
+              <h2>{{ readinessText() }}</h2>
             </div>
           }
-        </section>
+          <div class="timer-section">
+            <app-meeting-timer-controls [remaining]="sync.timerRemaining()" [canManage]="meeting.canManage"
+              [disabled]="commandsBlocked()" (start)="startTimer($event)" (add)="addTimer($event)" (stop)="stopTimer()" />
+            @if (sync.expired()) {
+              <div class="timer-expired" role="alert">
+                <span>Время вышло</span>
+                <button tuiButton type="button" size="s" appearance="flat" (click)="sync.dismissExpired()">Скрыть</button>
+              </div>
+            }
+          </div>
+        </div>
       }
 
       @if (meeting.phase === 'Closed') {
@@ -400,6 +387,7 @@
               [(privateCollection)]="privateCollection"
               [(anonymousVotes)]="anonymousVotes"
               [(voteSettings)]="voteSettings"
+              [(votingEnabled)]="votingEnabled"
               [busy]="commandsBlocked()"
               submitLabel="Сохранить настройки"
               (submitted)="save()" />
@@ -423,16 +411,16 @@
             <h2>Колонки</h2>
             <div class="columns-preview">
               @for (column of meeting.columns; track column.id) {
-                <span [style.color]="column.color">{{ column.name }}</span>
+                <span class="column-label" [style.--column-color]="column.color">{{ column.name }}</span>
               }
             </div>
             <p>Настройки изменяет только фасилитатор.</p>
           </section>
         }
       } @else {
-        <section class="board-section">
+        <section class="board-section" [class.collect-board]="meeting.phase === 'Collect'">
           <div class="board-heading">
-            <h2>Доска</h2>
+            <h2 [class.visually-hidden]="meeting.phase === 'Collect'">Доска</h2>
             @if (meeting.phase === 'Group' && meeting.canManage && meeting.integrations.ai) {
               <button tuiButton type="button" appearance="secondary" (click)="previewGroups()" [disabled]="commandsBlocked()">Предложить группировку</button>
             }
@@ -466,10 +454,14 @@
             @for (column of meeting.columns; track column.id) {
               <section
                 class="board-column"
+                [style.--column-color]="column.color"
                 [attr.aria-label]="column.name"
                 (dragover)="meeting.phase === 'Group' ? allowDrop($event) : null"
                 (drop)="meeting.phase === 'Group' ? drop($event, 'column', column.id) : null">
-                <h3 [style.color]="column.color">{{ column.name }}</h3>
+                <h3 class="column-label">{{ column.name }}</h3>
+                @if (column.description; as description) {
+                  <p class="hint card-text">{{ description }}</p>
+                }
                 @for (group of groupsForColumn(column.id); track group.id) {
                   <article
                     class="card-group"
@@ -545,8 +537,20 @@
                     (dragstart)="startDrag($event, 'card', card.id)"
                     (dragover)="meeting.phase === 'Group' ? allowDrop($event) : null"
                     (drop)="meeting.phase === 'Group' ? drop($event, 'card', card.id) : null">
+                    @if (!card.isHidden && editingCardId() !== card.id) {
+                      <div class="card-attribution">
+                        @if (card.isMine) { <span class="own-card">Моя карточка</span> }
+                        @if (card.authorDisplayName; as author) { <span>{{ author }}</span> }
+                        @else { <span>Анонимно</span> }
+                      </div>
+                    }
                     @if (card.isHidden) {
-                      <p>Карточка скрыта до группировки</p>
+                      <span class="hidden-glyph" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                          <path d="m3 3 18 18M10 5c5.4-1.2 9.7 2.2 12 7a12 12 0 0 1-2.5 3.3M6 6.7A14 14 0 0 0 2 12c2.5 4.4 6.1 7 10 7a10 10 0 0 0 5-1.4M10 10a3 3 0 0 0 4 4" />
+                        </svg>
+                      </span>
+                      <span>Карточка скрыта до группировки</span>
                     } @else if (editingCardId() === card.id && meeting.phase === 'Collect') {
                       <label>
                         <span class="visually-hidden">Текст карточки</span>
@@ -558,12 +562,6 @@
                       </div>
                     } @else {
                       @if (meeting.phase === 'Group') { <span class="drag-handle" draggable="true" (dragstart)="startDrag($event, 'card', card.id)">Перетащить</span> }<p class="card-text">{{ card.text }}</p>
-                    }
-                    @if (!card.isHidden && editingCardId() !== card.id) {
-                      <footer>
-                        @if (card.isMine) { <span class="own-card">Моя карточка</span> }
-                        @if (card.authorDisplayName; as author) { <span>{{ author }}</span> }
-                      </footer>
                     }
                     @if (meeting.phase === 'Collect' && card.isMine && editingCardId() !== card.id) {
                       <div class="card-actions">
@@ -588,23 +586,45 @@
                     }
                   </article>
                 }
-                @if (cardsForColumn(column.id).length === 0 && groupsForColumn(column.id).length === 0) {
+                @if (meeting.phase !== 'Collect' && cardsForColumn(column.id).length === 0 && groupsForColumn(column.id).length === 0) {
                   <p class="hint">В этой колонке пока нет карточек.</p>
                 }
                 @if (meeting.phase === 'Collect') {
-                  <form class="new-card" (ngSubmit)="createCard(column.id)">
-                    <label>
-                      <span>Новая карточка</span>
-                      <textarea
-                        [ngModel]="newCardText(column.id)"
-                        (ngModelChange)="setNewCardText(column.id, $event)"
-                        [name]="'card-' + column.id"
-                        maxlength="4000"
-                        rows="4"
-                        required></textarea>
-                    </label>
-                    <button tuiButton type="submit" size="s" [disabled]="commandsBlocked()">Добавить карточку</button>
-                  </form>
+                  @if (cardComposerColumn() === column.id) {
+                    <form class="new-card" (ngSubmit)="createCard(column.id)">
+                      @if (meeting.anonymousCards) {
+                        <p class="hint">Карточки в этой встрече анонимны</p>
+                      } @else {
+                        <label>Авторство карточки
+                          <select [ngModel]="newCardAnonymity()[column.id] ?? false"
+                            (ngModelChange)="setNewCardAnonymity(column.id, $event)" [name]="'anonymous-' + column.id">
+                            <option [ngValue]="false">С именем</option>
+                            <option [ngValue]="true">Анонимно</option>
+                          </select>
+                        </label>
+                      }
+                      <label>
+                        <span>Новая карточка</span>
+                        <textarea
+                          [ngModel]="newCardText(column.id)"
+                          (ngModelChange)="setNewCardText(column.id, $event)"
+                          [name]="'card-' + column.id"
+                          #newCardInput
+                          maxlength="4000"
+                          rows="4"
+                          required></textarea>
+                      </label>
+                      <div class="inline">
+                        <button tuiButton type="submit" size="s" [disabled]="commandsBlocked()">Добавить карточку</button>
+                        <button tuiButton type="button" size="s" appearance="flat" (click)="cancelNewCard(column.id)">Отмена</button>
+                      </div>
+                    </form>
+                  } @else {
+                    <button class="add-card" tuiButton type="button" appearance="secondary" size="s"
+                      aria-label="Добавить карточку" (click)="openCardComposer(column.id)" [disabled]="commandsBlocked()">
+                      <span aria-hidden="true">+</span> Добавить карточку
+                    </button>
+                  }
                 }
               </section>
             }
@@ -613,20 +633,6 @@
       }
 
       @if (meeting.canManage && meeting.phase !== 'Closed') {
-        <section>
-          <h2>Приглашение</h2>
-          @if (invite(); as currentInvite) {
-            <div class="invite">
-              <input aria-label="Ссылка приглашения" readonly [value]="currentInvite.url" />
-              <button tuiButton type="button" (click)="copyInvite()" [disabled]="commandsBlocked()">{{ copied() ? 'Скопировано' : 'Копировать' }}</button>
-              <button tuiButton type="button" appearance="secondary" (click)="rotateInvite()" [disabled]="commandsBlocked()">Заменить ссылку</button>
-            </div>
-            <p class="hint">Версия приглашения {{ currentInvite.version }}.</p>
-          } @else {
-            <button tuiButton type="button" appearance="secondary" (click)="loadInvite()" [disabled]="commandsBlocked()">Показать приглашение</button>
-          }
-        </section>
-
         <section>
           <h2>Управление участниками</h2>
           <div class="inline">

@@ -47,9 +47,9 @@ public static class MeetingCompletionFactory
             state.Cards.Count,
             state.Topics.Count,
             state.Votes.Sum(vote => vote.Count));
-        IReadOnlyList<CardData> cards = state.Meeting.AnonymousCards
-            ? state.Cards.Select(card => card with { AuthorId = null, AuthorDisplayName = null }).ToArray()
-            : state.Cards;
+        var cards = state.Cards.Select(card => state.Meeting.AnonymousCards || card.Card.Anonymous
+            ? card with { AuthorId = null, AuthorDisplayName = null }
+            : card).ToArray();
         IReadOnlyList<VoteAllocation> votes = state.Meeting.AnonymousVotes ? [] : state.Votes;
         return state with
         {

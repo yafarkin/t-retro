@@ -19,6 +19,7 @@ public static class ApiMappings
             snapshot.Meeting.AnonymousCards,
             snapshot.Meeting.PrivateCollection,
             snapshot.Meeting.AnonymousVotes,
+            snapshot.Meeting.VotingEnabled,
             new VoteSettingsResponse(
                 snapshot.Meeting.VoteSettings.Mode.ToString().ToLowerInvariant(),
                 snapshot.Meeting.VoteSettings.Percent,
@@ -28,7 +29,8 @@ public static class ApiMappings
                 column.Id.ToString(),
                 column.Name,
                 column.Color,
-                column.Position)).ToArray(),
+                column.Position,
+                column.Description)).ToArray(),
             snapshot.Participants.Select(participant => new ParticipantResponse(
                 participant.UserId.ToString(),
                 participant.Subject,
@@ -91,7 +93,7 @@ public static class ApiMappings
                     snapshot.Completion.TopicCount,
                     snapshot.Completion.VoteCount));
 
-    public static ColumnInput ToInput(ColumnRequest column) => new(column.Name, column.Color);
+    public static ColumnInput ToInput(ColumnRequest column) => new(column.Name, column.Color, column.Description);
 
     private static MeetingDiscussionResponse ToResponse(MeetingDiscussion discussion) =>
         new(

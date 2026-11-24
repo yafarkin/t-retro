@@ -1,21 +1,22 @@
+:host {
+  display: grid;
+  flex: 1;
+}
+
 .page {
-  min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 2rem;
+  padding: clamp(1rem, 4vw, 2rem);
   box-sizing: border-box;
 }
 
 .card {
-  width: min(100%, 28rem);
-  padding: 2rem;
+  box-sizing: border-box;
+  width: min(100%, 32rem);
+  padding: clamp(1rem, 4vw, 2rem);
   border: 1px solid var(--tui-border-normal);
   border-radius: 1rem;
   background: var(--tui-background-elevation-1);
-}
-
-.eyebrow {
-  color: var(--tui-text-secondary);
 }
 
 form {

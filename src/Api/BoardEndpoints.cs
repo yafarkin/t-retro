@@ -22,6 +22,7 @@ public static class BoardEndpoints
                 meetingId,
                 request.ColumnId,
                 request.Text,
+                request.Anonymous,
                 request.OperationId,
                 cancellationToken);
             return Results.Created(

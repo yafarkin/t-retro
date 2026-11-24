@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  CreateMeetingPayload,
   GroupProposal,
   Invite,
   JiraExportResult,
@@ -18,7 +19,7 @@ export class MeetingService {
     return this.http.get<MeetingSummary[]>('/api/meetings');
   }
 
-  create(payload: MeetingSettingsPayload): Observable<{ id: string; version: number }> {
+  create(payload: CreateMeetingPayload): Observable<{ id: string; version: number }> {
     return this.http.post<{ id: string; version: number }>('/api/meetings', payload);
   }
 
@@ -53,10 +54,11 @@ export class MeetingService {
     return this.http.put<void>(`/api/meetings/${meetingId}/facilitator`, { userId });
   }
 
-  createCard(meetingId: string, columnId: string, text: string): Observable<{ id: string; version: number }> {
+  createCard(meetingId: string, columnId: string, text: string, anonymous: boolean): Observable<{ id: string; version: number }> {
     return this.http.post<{ id: string; version: number }>(`/api/meetings/${meetingId}/cards`, {
       columnId,
       text,
+      anonymous,
       operationId: crypto.randomUUID(),
     });
   }

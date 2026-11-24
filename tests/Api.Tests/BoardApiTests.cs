@@ -9,11 +9,12 @@ namespace Api.Tests;
 public sealed class BoardApiTests
 {
     [Theory]
-    [InlineData(true, true)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(false, false)]
-    public async Task PrivacyMatrixOmitsHiddenFieldsFromNetworkJson(bool anonymousCards, bool privateCollection)
+    [InlineData(true, true, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, false)]
+    [InlineData(false, false, true)]
+    public async Task PrivacyMatrixOmitsHiddenFieldsFromNetworkJson(bool anonymousCards, bool privateCollection, bool anonymous)
     {
         using var factory = new TRetroWebApplicationFactory();
         await ApiTestHelpers.MigrateAsync(factory);
@@ -25,7 +26,7 @@ public sealed class BoardApiTests
         await JoinAsync(facilitator, member, meeting.Id);
         await AdvanceAsync(facilitator, meeting.Id, "Draft", 1);
         const string secretText = "Скрытый текст карточки";
-        await CreateCardAsync(member, meeting.Id, await FirstColumnIdAsync(member, meeting.Id), secretText);
+        await CreateCardAsync(member, meeting.Id, await FirstColumnIdAsync(member, meeting.Id), secretText, anonymous);
 
         var response = await facilitator.GetAsync($"/api/meetings/{meeting.Id}/state");
         response.EnsureSuccessStatusCode();
@@ -33,16 +34,17 @@ public sealed class BoardApiTests
         var state = JsonSerializer.Deserialize<MeetingStateResponse>(raw, JsonOptions);
         var otherCard = Assert.Single(state!.Cards);
         Assert.False(otherCard.IsMine);
+        var authorHidden = anonymousCards || privateCollection || anonymous;
         Assert.Equal(privateCollection, otherCard.IsHidden);
         Assert.Equal(privateCollection ? null : secretText, otherCard.Text);
-        Assert.Equal(anonymousCards ? null : state.Participants.Single(p => p.DisplayName == "Автор").Id, otherCard.AuthorId);
-        Assert.Equal(anonymousCards ? null : "Автор", otherCard.AuthorDisplayName);
+        Assert.Equal(authorHidden ? null : state.Participants.Single(p => p.DisplayName == "Автор").Id, otherCard.AuthorId);
+        Assert.Equal(authorHidden ? null : "Автор", otherCard.AuthorDisplayName);
 
         using var document = JsonDocument.Parse(raw);
         var cardJson = document.RootElement.GetProperty("cards")[0];
         Assert.Equal(!privateCollection, cardJson.TryGetProperty("text", out _));
-        Assert.Equal(!anonymousCards, cardJson.TryGetProperty("authorId", out _));
-        Assert.Equal(!anonymousCards, cardJson.TryGetProperty("authorDisplayName", out _));
+        Assert.Equal(!authorHidden, cardJson.TryGetProperty("authorId", out _));
+        Assert.Equal(!authorHidden, cardJson.TryGetProperty("authorDisplayName", out _));
         if (privateCollection)
         {
             Assert.DoesNotContain(secretText, raw);
@@ -113,6 +115,10 @@ public sealed class BoardApiTests
             $"/api/meetings/{meeting.Id}/cards",
             new CreateCardRequest { ColumnId = Guid.Parse(columnId), Text = "Другое тело", OperationId = operationId });
         Assert.Equal(HttpStatusCode.Conflict, conflictingCreate.StatusCode);
+        var conflictingAnonymity = await facilitator.PostAsJsonAsync(
+            $"/api/meetings/{meeting.Id}/cards",
+            new CreateCardRequest { ColumnId = Guid.Parse(columnId), Text = "Карточка ведущего", Anonymous = true, OperationId = operationId });
+        Assert.Equal(HttpStatusCode.Conflict, conflictingAnonymity.StatusCode);
 
         var deleted = await CreateCardAsync(member, meeting.Id, columnId, "Удаляемая карточка");
         var delete = await member.SendAsync(new HttpRequestMessage(
@@ -297,11 +303,12 @@ public sealed class BoardApiTests
         HttpClient client,
         string meetingId,
         string columnId,
-        string text)
+        string text,
+        bool anonymous = false)
     {
         var response = await client.PostAsJsonAsync(
             $"/api/meetings/{meetingId}/cards",
-            new CreateCardRequest { ColumnId = Guid.Parse(columnId), Text = text, OperationId = Guid.NewGuid() });
+            new CreateCardRequest { ColumnId = Guid.Parse(columnId), Text = text, Anonymous = anonymous, OperationId = Guid.NewGuid() });
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<CardCreatedResponse>())!;
     }
