@@ -1,0 +1,57 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+}
+
+.timer-button svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.timer-countdown {
+  color: var(--accent);
+  font-size: 1.1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-dialog {
+  width: min(calc(100vw - 1.5rem), 25rem);
+}
+
+.timer-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.4rem;
+}
+
+.timer-entry input {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 2.5rem;
+  flex: 1 1 7rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.timer-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.timer-presets [aria-pressed='true'] {
+  outline: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.stop-timer {
+  margin-top: 1rem;
+}

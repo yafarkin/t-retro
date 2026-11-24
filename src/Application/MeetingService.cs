@@ -17,6 +17,7 @@ public sealed class MeetingService(
         int voteMinimum,
         int? fixedBudget,
         bool votingEnabled,
+        bool startCollecting,
         CancellationToken cancellationToken)
     {
         var meetingId = Guid.NewGuid();
@@ -24,7 +25,7 @@ public sealed class MeetingService(
         var meeting = new Meeting(
             meetingId,
             RequiredText.Create(name, 120),
-            MeetingPhase.Draft,
+            startCollecting ? MeetingPhase.Collect : MeetingPhase.Draft,
             privacy.AnonymousCards,
             privacy.PrivateCollection,
             privacy.AnonymousVotes,

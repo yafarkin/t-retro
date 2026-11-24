@@ -1,0 +1,44 @@
+.invite-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 1rem;
+}
+
+.invite-url {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.invite-version {
+  margin-bottom: 0;
+  color: var(--muted);
+}
+
+.invite-qr {
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: #fff;
+  image-rendering: pixelated;
+}
+
+@media (max-width: 33rem) {
+  .invite-content {
+    grid-template-columns: 1fr;
+  }
+}

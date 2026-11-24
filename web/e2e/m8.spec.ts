@@ -25,11 +25,12 @@ test('M8 mock Jira export shares created status and locks the action in two cont
   await expect(first.getByRole('heading', { name: 'Ретро M8 mock Jira' })).toBeVisible();
   await first.getByRole('button', { name: 'Показать приглашение' }).click();
   const invite = await first.getByLabel('Ссылка приглашения').inputValue();
+  await first.getByRole('button', { name: 'Закрыть приглашение' }).click();
   await second.goto(invite);
   await second.getByRole('button', { name: 'Вступить во встречу' }).click();
-  await first.getByRole('button', { name: 'Начать сбор' }).click();
   await expect(second.getByText('Сбор карточек', { exact: true })).toBeVisible();
   const column = first.getByRole('region', { name: 'Начать', exact: true });
+  await column.getByRole('button', { name: 'Добавить карточку' }).click();
   await column.getByLabel('Новая карточка').fill('Тема для экспорта');
   await column.getByRole('button', { name: 'Добавить карточку' }).click();
   await expect(column.getByText('Тема для экспорта', { exact: true })).toBeVisible();

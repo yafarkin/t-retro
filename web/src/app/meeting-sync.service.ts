@@ -3,7 +3,6 @@ import { firstValueFrom } from 'rxjs';
 import { HubConnection, HubConnectionBuilder } from '@microsoft/signalr';
 import { MeetingState } from './meeting.models';
 import { MeetingService } from './meeting.service';
-import { TimerSoundService } from './timer-sound.service';
 
 @Injectable()
 export class MeetingSyncService implements OnDestroy {
@@ -21,7 +20,6 @@ export class MeetingSyncService implements OnDestroy {
   readonly error = signal<string | null>(null);
   readonly expired = signal<{ runId: string; phase: string } | null>(null);
   readonly now = signal(Date.now());
-  readonly sound = inject(TimerSoundService);
   readonly connectionState = signal<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
   readonly canModify = computed(() => this.connectionState() === 'connected' && !this.revoked());
   readonly timerRemaining = computed(() => {
@@ -55,9 +53,8 @@ export class MeetingSyncService implements OnDestroy {
       }
     });
     connection.on('TimerExpired', (id: string, runId: string, phase: string) => {
-      if (id === this.meetingId) {
+      if (id === this.meetingId && this.snapshot()?.phase === phase) {
         this.expired.set({ runId, phase });
-        void this.sound.playExpired(id, runId);
       }
     });
     connection.onreconnecting(() => this.connectionState.set('reconnecting'));
@@ -81,10 +78,13 @@ export class MeetingSyncService implements OnDestroy {
   }
 
   replaceSnapshot(snapshot: MeetingState): void {
-    this.clockOffset = Date.parse(snapshot.serverNowUtc) - Date.now();
     const current = this.snapshot();
     if (!current || snapshot.version >= current.version) {
-      if (snapshot.timer && this.expired()?.runId !== snapshot.timer.runId) {
+      const receivedAt = Date.now();
+      this.clockOffset = Date.parse(snapshot.serverNowUtc) - receivedAt;
+      this.now.set(receivedAt);
+      const expired = this.expired();
+      if (expired && (expired.phase !== snapshot.phase || (snapshot.timer && expired.runId !== snapshot.timer.runId))) {
         this.expired.set(null);
       }
       this.snapshot.set(snapshot);

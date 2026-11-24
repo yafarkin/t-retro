@@ -156,6 +156,9 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await second.getByRole('button', { name: 'Сохранить настройки' }).click();
   await second.getByRole('button', { name: 'Создать ретро', exact: true }).click();
   await expect(second.getByRole('heading', { name: 'Ретро M1', exact: true })).toBeVisible();
+  await expect(second.getByText('Сбор карточек', { exact: true })).toBeVisible();
+  await expect(second.getByRole('heading', { name: 'Настройки подготовки' })).toHaveCount(0);
+  await expect(second.locator('.facilitator-actions').getByRole('button', { name: 'Показать приглашение' })).toBeVisible();
 
   await first.goto(`${origin}/templates`);
   const sharedCard = first.locator('article').filter({ hasText: 'Общий шаблон' });
@@ -163,15 +166,19 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await sharedCard.getByRole('button', { name: 'Удалить' }).click();
   await expect(sharedCard).toHaveCount(0);
   await second.reload();
-  await expect(second.getByRole('textbox', { name: 'Название колонки' }).nth(0)).toHaveValue('Что попробовать');
-  await expect(second.getByLabel('Описание колонки').first()).toHaveValue('Что проверим в следующем цикле');
-  await expect(second.getByRole('textbox', { name: 'Название колонки' }).nth(1)).toHaveValue('Перестать');
-  await expect(second.getByRole('textbox', { name: 'Название колонки' }).nth(2)).toHaveValue('Продолжать');
-  await expect(second.getByLabel('Описание колонки').last()).toHaveValue('Оставляем для этого ретро');
-  await expect(second.getByLabel('Включить голосование')).not.toBeChecked();
+  await expect(second.locator('.board-column h3')).toHaveText(['Что попробовать', 'Перестать', 'Продолжать']);
+  await expect(second.getByRole('region', { name: 'Что попробовать' })).toContainText('Что проверим в следующем цикле');
+  await expect(second.getByRole('region', { name: 'Продолжать' })).toContainText('Оставляем для этого ретро');
 
   await second.getByRole('button', { name: 'Показать приглашение' }).click();
   const oldInvite = await second.getByLabel('Ссылка приглашения').inputValue();
+  const qr = second.getByRole('img', { name: 'QR-код приглашения' });
+  await expect(qr).toHaveAttribute('src', /^data:image\/gif;base64,/);
+  const originalQr = await qr.getAttribute('src');
+  const download = second.waitForEvent('download');
+  await second.getByRole('link', { name: 'Скачать QR-код' }).click();
+  expect((await download).suggestedFilename()).toBe('t-retro-invite.gif');
+  await second.getByRole('button', { name: 'Закрыть приглашение' }).click();
   await first.goto(oldInvite);
   await first.getByRole('button', { name: 'Вступить во встречу' }).click();
   await expect(first.getByRole('heading', { name: 'Ретро M1', exact: true })).toBeVisible();
@@ -182,7 +189,9 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   second.once('dialog', (dialog) => dialog.accept());
   await second.getByRole('button', { name: 'Заменить ссылку' }).click();
   await expect(second.getByText('Версия приглашения 2.')).toBeVisible();
+  await expect(qr).not.toHaveAttribute('src', originalQr!);
   const newInvite = await second.getByLabel('Ссылка приглашения').inputValue();
+  await second.getByRole('button', { name: 'Закрыть приглашение' }).click();
   expect(newInvite).not.toBe(oldInvite);
 
   await third.goto(oldInvite);
@@ -193,11 +202,11 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await expect(third.getByRole('heading', { name: 'Ретро M1', exact: true })).toBeVisible();
   await expect(third.getByRole('listitem').filter({ hasText: 'Сотрудник В' })).toBeVisible();
 
-  await second.getByRole('button', { name: 'Начать сбор' }).click();
   for (const page of [first, second]) {
     await expect(page.getByRole('region', { name: 'Что попробовать' })).toContainText('Что проверим в следующем цикле');
   }
   const column = second.getByRole('region', { name: 'Что попробовать' });
+  await column.getByRole('button', { name: 'Добавить карточку' }).click();
   await column.getByLabel('Новая карточка').fill('Тема без голосования');
   await column.getByRole('button', { name: 'Добавить карточку' }).click();
   await expect(column.getByText('Тема без голосования', { exact: true })).toBeVisible();

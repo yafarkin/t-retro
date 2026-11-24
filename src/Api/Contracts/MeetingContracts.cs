@@ -56,6 +56,11 @@ public sealed class UpdateMeetingSettingsRequest : MeetingSettingsRequest
     public int ExpectedVersion { get; set; }
 }
 
+public sealed class CreateMeetingRequest : MeetingSettingsRequest
+{
+    public bool StartCollecting { get; set; }
+}
+
 public sealed record MeetingCreatedResponse(string Id, int Version);
 
 public sealed record MeetingSummaryResponse(

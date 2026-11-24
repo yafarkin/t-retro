@@ -30,6 +30,10 @@ export interface MeetingSettingsPayload {
   voteSettings: VoteSettings;
 }
 
+export interface CreateMeetingPayload extends MeetingSettingsPayload {
+  startCollecting?: boolean;
+}
+
 export interface MeetingSummary {
   id: string;
   name: string;

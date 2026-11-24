@@ -1,11 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { afterNextRender, Component, computed, effect, ElementRef, inject, Injector, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Observable } from 'rxjs';
 import { TuiButton } from '@taiga-ui/core';
 import { apiErrorMessage } from './api-error';
 import { MeetingForm } from './meeting-form';
+import { MeetingInvite } from './meeting-invite';
+import { MeetingTimerControls } from './meeting-timer-controls';
 import {
   ActionItem,
   copyEditableColumns,
@@ -29,12 +31,14 @@ import { TemplateService } from './template.service';
 
 @Component({
   selector: 'app-meeting-settings-page',
-  imports: [FormsModule, MeetingForm, RouterLink, TuiButton],
+  imports: [FormsModule, MeetingForm, MeetingInvite, MeetingTimerControls, RouterLink, TuiButton],
   providers: [MeetingSyncService],
   templateUrl: './meeting-settings-page.html',
-  styleUrl: './meeting-settings-page.scss',
+  styleUrls: ['./meeting-settings-page.scss', './meeting-board.scss'],
 })
 export class MeetingSettingsPage {
+  private readonly injector = inject(Injector);
+  private readonly newCardInput = viewChild<ElementRef<HTMLTextAreaElement>>('newCardInput');
   private readonly route = inject(ActivatedRoute);
   private readonly meetings = inject(MeetingService);
   private readonly templatesService = inject(TemplateService);
@@ -51,8 +55,7 @@ export class MeetingSettingsPage {
   readonly notice = signal<string | null>(null);
   readonly selectedTemplate = signal('');
   readonly selectedMember = signal('');
-  readonly invite = signal<{ url: string; version: number } | null>(null);
-  readonly copied = signal(false);
+  readonly cardComposerColumn = signal<string | null>(null);
   readonly newCardTexts = signal<Record<string, string>>({});
   readonly newCardAnonymity = signal<Record<string, boolean>>({});
   readonly editingCardId = signal<string | null>(null);
@@ -68,10 +71,10 @@ export class MeetingSettingsPage {
   readonly editingEntryId = signal<string | null>(null);
   readonly editingEntryText = signal('');
   readonly editingActionAssignee = signal('');
-  readonly timerSeconds = signal(60);
+  readonly activeParticipants = computed(() =>
+    this.state()?.participants.filter((participant) => participant.status === 'Active') ?? []);
   readonly otherParticipants = computed(() =>
-    this.state()?.participants.filter((participant) =>
-      participant.status === 'Active' && participant.id !== this.state()?.facilitatorId) ?? []);
+    this.activeParticipants().filter((participant) => participant.id !== this.state()?.facilitatorId));
 
   readonly name = signal('');
   readonly columns = signal(defaultColumns());
@@ -150,37 +153,6 @@ export class MeetingSettingsPage {
     });
   }
 
-  loadInvite(): void {
-    this.error.set(null);
-    this.meetings.invite(this.meetingId).subscribe({
-      next: (invite) => this.invite.set(invite),
-      error: (error: HttpErrorResponse) => this.error.set(apiErrorMessage(error)),
-    });
-  }
-
-  rotateInvite(): void {
-    if (!window.confirm('Отозвать прежнюю ссылку и создать новую?')) {
-      return;
-    }
-
-    this.meetings.rotateInvite(this.meetingId).subscribe({
-      next: (invite) => {
-        this.invite.set(invite);
-        this.copied.set(false);
-      },
-      error: (error: HttpErrorResponse) => this.error.set(apiErrorMessage(error)),
-    });
-  }
-
-  copyInvite(): void {
-    const invite = this.invite();
-    if (!invite) {
-      return;
-    }
-
-    navigator.clipboard.writeText(invite.url).then(() => this.copied.set(true));
-  }
-
   excludeMember(): void {
     const participant = this.otherParticipants().find((item) => item.id === this.selectedMember());
     if (!participant || !window.confirm(`Исключить участника «${participant.displayName}»?`)) {
@@ -213,6 +185,17 @@ export class MeetingSettingsPage {
     });
   }
 
+  openCardComposer(columnId: string): void {
+    this.cardComposerColumn.set(columnId);
+    afterNextRender(() => this.newCardInput()?.nativeElement.focus(), { injector: this.injector });
+  }
+
+  cancelNewCard(columnId: string): void {
+    this.setNewCardText(columnId, '');
+    this.setNewCardAnonymity(columnId, false);
+    this.cardComposerColumn.set(null);
+  }
+
   newCardText(columnId: string): string {
     return this.newCardTexts()[columnId] ?? '';
   }
@@ -240,8 +223,7 @@ export class MeetingSettingsPage {
     this.notice.set(null);
     this.meetings.createCard(this.meetingId, columnId, text, this.newCardAnonymity()[columnId] ?? false).subscribe({
       next: () => {
-        this.setNewCardText(columnId, '');
-        this.setNewCardAnonymity(columnId, false);
+        this.cancelNewCard(columnId);
         this.busy.set(false);
         this.notice.set('Карточка добавлена.');
         void this.sync.refresh();
@@ -486,24 +468,24 @@ export class MeetingSettingsPage {
     return phase === 'Collect' || phase === 'Group' || phase === 'Vote' || phase === 'Discuss';
   }
 
-  startTimer(): void {
+  startTimer(seconds: number): void {
     const current = this.state();
-    if (!current || this.timerSeconds() <= 0 || this.commandsBlocked()) {
+    if (!current || seconds <= 0 || this.commandsBlocked()) {
       return;
     }
     this.executeTimerCommand(
-      this.meetings.startTimer(this.meetingId, this.timerSeconds()),
+      this.meetings.startTimer(this.meetingId, seconds),
       'Таймер запущен.',
     );
   }
 
-  addTimer(): void {
+  addTimer(seconds: number): void {
     const current = this.state();
-    if (!current?.timer || this.timerSeconds() <= 0 || this.commandsBlocked()) {
+    if (!current?.timer || seconds <= 0 || this.commandsBlocked()) {
       return;
     }
     this.executeTimerCommand(
-      this.meetings.addTimer(this.meetingId, current.timer.runId, this.timerSeconds()),
+      this.meetings.addTimer(this.meetingId, current.timer.runId, seconds),
       'Время добавлено.',
     );
   }
@@ -517,12 +499,6 @@ export class MeetingSettingsPage {
       this.meetings.stopTimer(this.meetingId, current.timer.runId),
       'Таймер остановлен.',
     );
-  }
-
-  formatTimer(totalSeconds: number): string {
-    const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
-    const seconds = (totalSeconds % 60).toString().padStart(2, '0');
-    return `${minutes}:${seconds}`;
   }
 
   private executeTimerCommand(command: Observable<unknown>, success: string): void {

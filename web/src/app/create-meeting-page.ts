@@ -8,7 +8,7 @@ import { apiErrorMessage } from './api-error';
 import { ColumnsEditor } from './columns-editor';
 import { initialMeetingOptions, MeetingSetup } from './meeting-setup';
 import { MeetingService } from './meeting.service';
-import { copyEditableColumns, defaultColumns, EditableColumn, MeetingSettingsPayload, TemplateVisibility } from './meeting.models';
+import { copyEditableColumns, CreateMeetingPayload, defaultColumns, EditableColumn, TemplateVisibility } from './meeting.models';
 import { TemplateService } from './template.service';
 import { hasTemplateColumnErrors, templateNameError } from './template-validation';
 
@@ -211,10 +211,11 @@ export class CreateMeetingPage {
     });
   }
 
-  private payload(): MeetingSettingsPayload {
+  private payload(): CreateMeetingPayload {
     return {
       name: this.name().trim(),
       columns: this.columns(),
+      startCollecting: true,
       ...this.options(),
     };
   }
