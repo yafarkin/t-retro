@@ -19,13 +19,13 @@ fi
 
 for command in dotnet node npm curl; do
   if ! command -v "$command" >/dev/null 2>&1; then
-    echo "Не найдена команда '$command'. Сначала выполните ./tools/build." >&2
+    echo "Не найдена команда '$command'. Сначала выполните ./tools/build.sh." >&2
     exit 1
   fi
 done
 
 if [[ ! -f src/Api/bin/Debug/net10.0/Api.dll || ! -x web/node_modules/.bin/ng ]]; then
-  echo "Приложение ещё не собрано. Выполните ./tools/build." >&2
+  echo "Приложение ещё не собрано. Выполните ./tools/build.sh." >&2
   exit 1
 fi
 

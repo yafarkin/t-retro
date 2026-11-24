@@ -35,17 +35,17 @@ if [[ $ACTUAL_DOTNET != "$EXPECTED_DOTNET" ]]; then
   exit 1
 fi
 
-EXPECTED_NODE=$(tr -d 'v[:space:]' < .nvmrc)
-ACTUAL_NODE=$(node --version | tr -d 'v[:space:]')
-if [[ $ACTUAL_NODE != "$EXPECTED_NODE" ]]; then
-  echo "Требуется Node.js $EXPECTED_NODE, найден $ACTUAL_NODE." >&2
+EXPECTED_NODE_MAJOR=$(tr -d 'v[:space:]' < .nvmrc | cut -d. -f1)
+ACTUAL_NODE_MAJOR=$(node --version | tr -d 'v[:space:]' | cut -d. -f1)
+if [[ $ACTUAL_NODE_MAJOR != "$EXPECTED_NODE_MAJOR" ]]; then
+  echo "Требуется Node.js $EXPECTED_NODE_MAJOR.x, найден $(node --version)." >&2
   exit 1
 fi
 
-EXPECTED_NPM=$(sed -n 's/.*"packageManager":[[:space:]]*"npm@\([^"]*\)".*/\1/p' web/package.json)
-ACTUAL_NPM=$(npm --version)
-if [[ $ACTUAL_NPM != "$EXPECTED_NPM" ]]; then
-  echo "Требуется npm $EXPECTED_NPM, найден $ACTUAL_NPM." >&2
+EXPECTED_NPM_MAJOR=$(sed -n 's/.*"packageManager":[[:space:]]*"npm@\([^"]*\)".*/\1/p' web/package.json | cut -d. -f1)
+ACTUAL_NPM_MAJOR=$(npm --version | cut -d. -f1)
+if [[ $ACTUAL_NPM_MAJOR != "$EXPECTED_NPM_MAJOR" ]]; then
+  echo "Требуется npm $EXPECTED_NPM_MAJOR.x, найден $(npm --version)." >&2
   exit 1
 fi
 

@@ -46,20 +46,20 @@
 
 ### Инструменты и CI
 
-- [tools/build](../tools/build) поддерживает macOS и Ubuntu, проверяет точные версии .NET SDK, Node.js и npm, затем выполняет чистую сборку и все проверки. Совместим с Bash 3.2, Docker не нужен. На Ubuntu Playwright ставит системные зависимости через `--with-deps`.
-- [tools/run](../tools/run) поддерживает macOS и Ubuntu, применяет миграции, запускает API и Angular, ждёт Ctrl+C и останавливает оба процесса. Проверен через псевдотерминал: URL поднялись, порты после Ctrl+C освобождены.
+- [tools/build.sh](../tools/build.sh) поддерживает macOS и Ubuntu, проверяет мажорные версии .NET SDK, Node.js и npm, затем выполняет чистую сборку и все проверки. Совместим с Bash 3.2, Docker не нужен. На Ubuntu Playwright ставит системные зависимости через `--with-deps`.
+- [tools/run.sh](../tools/run.sh) поддерживает macOS и Ubuntu, применяет миграции, запускает API и Angular, ждёт Ctrl+C и останавливает оба процесса. Проверен через псевдотерминал: URL поднялись, порты после Ctrl+C освобождены.
 - [web/playwright.config.ts](../web/playwright.config.ts) использует отдельную SQLite `.tools/e2e/t-retro.db`, не рабочую базу.
-- [.github/workflows/ci.yml](../.github/workflows/ci.yml) запускает тот же `tools/build` на `ubuntu-latest` x86_64 для push и pull request. Точная npm устанавливается отдельным шагом. macOS-runner был заменён из-за длинной очереди arm64.
+- [.github/workflows/ci.yml](../.github/workflows/ci.yml) запускает тот же `tools/build.sh` на `ubuntu-latest` x86_64 для push и pull request. Точная npm устанавливается отдельным шагом. macOS-runner был заменён из-за длинной очереди arm64.
 - Первый CI выявил npm 11.12.1 вместо 12.1.0; исправление проверено зелёными run `45230426865` и `45231230315`.
 
 ## Результаты последних проверок
 
-Полный локальный `./tools/build` прошёл:
+Полный локальный `./tools/build.sh` прошёл:
 
 - Backend без предупреждений компилятора: 85 тестов — Domain 25, Application 8, Infrastructure 7, API 45.
 - Frontend: production build и 11 unit-тестов.
 - Все девять E2E M1–M9 на реальных SPA, API, SQLite и WebSocket.
-- `tools/run` проверен запуском обоих серверов и настоящим терминальным Ctrl+C.
+- `tools/run.sh` проверен запуском обоих серверов и настоящим терминальным Ctrl+C.
 
 Ключевые проверки:
 
@@ -90,7 +90,7 @@
 3. M10.3 — миграции 0001–0009, ограничения, транзакции, версии, гонки, идемпотентность, перевыборы и рестарт на реальной SQLite.
 4. M10.4 — объединённый маршрут нескольких сотрудников до PDF с reconnect, двумя вкладками, одним сигналом и новой сессией отчёта.
 5. M10.5 — доказательную матрицу сценариев 01–15, 17 и локальной части 18. Для 16 проверить только локальный рестарт, reconnect и pipeline; pod/PostgreSQL/deployment оставить в P4.2. Базовую встречу с настроенным TWork отложить в P2/P4.
-6. M10.6 — локальный `tools/build` и зелёный CI на одном итоговом SHA, актуальные числа тестов и очистка только тестовых артефактов.
+6. M10.6 — локальный `tools/build.sh` и зелёный CI на одном итоговом SHA, актуальные числа тестов и очистка только тестовых артефактов.
 7. M10.7 — документацию запуска, ограничений, приёмочной матрицы и отложенных P1–P4 без секретов и домашних путей.
 8. M10.8 — разбор advisory и дерева `ng-morph`/`minimatch`, минимальное совместимое исправление при наличии либо документированное ограничение без ложного заявления об устранении.
 
@@ -115,7 +115,7 @@
 - [docs/tasks.md](tasks.md#этап-m10-проверка-mvp) — подробный план M10 и статусы P1–P4.
 - [docs/Retro_Spec.md](Retro_Spec.md#14-приёмка-и-самопроверка-постановки) — исходные приёмочные сценарии.
 - [README.md](../README.md) — версии, конфигурация, команды и результаты.
-- [tools/build](../tools/build), [tools/run](../tools/run) — стандартные локальные действия macOS и Ubuntu.
+- [tools/build.sh](../tools/build.sh), [tools/run.sh](../tools/run.sh) — стандартные локальные действия macOS и Ubuntu.
 - [.github/workflows/ci.yml](../.github/workflows/ci.yml) — удалённый цикл.
 - [tests/Domain.Tests](../tests/Domain.Tests), [tests/Application.Tests](../tests/Application.Tests), [tests/Infrastructure.Tests](../tests/Infrastructure.Tests), [tests/Api.Tests](../tests/Api.Tests) — существующая основа M10.1–M10.3.
 - [web/e2e](../web/e2e) — девять существующих браузерных сценариев.

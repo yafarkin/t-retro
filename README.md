@@ -77,17 +77,17 @@ Docker на текущей машине отсутствует. Dockerfile и do
 Из корня репозитория запустите:
 
 ```bash
-./tools/build
-./tools/run
+./tools/build.sh
+./tools/run.sh
 ```
 
-`tools/build` поддерживает macOS и Ubuntu Linux. Он проверяет ОС и точные версии .NET SDK, Node.js и npm из `global.json`, `.nvmrc` и `web/package.json`. Затем выполняет restore, чистую сборку и тесты backend, `npm ci`, production build, unit-тесты frontend и все E2E. Playwright Chromium устанавливается в `.tools/playwright`; на Ubuntu системные зависимости устанавливаются через `playwright install --with-deps chromium`. E2E используют отдельную SQLite в `.tools/e2e`, не затрагивая рабочую базу. Скрипт совместим с системным Bash 3.2 и не требует Docker.
+`tools/build.sh` поддерживает macOS и Ubuntu Linux. Он проверяет ОС и мажорные версии .NET SDK, Node.js и npm из `global.json`, `.nvmrc` и `web/package.json`. Затем выполняет restore, чистую сборку и тесты backend, `npm ci`, production build, unit-тесты frontend и все E2E. Playwright Chromium устанавливается в `.tools/playwright`; на Ubuntu системные зависимости устанавливаются через `playwright install --with-deps chromium`. E2E используют отдельную SQLite в `.tools/e2e`, не затрагивая рабочую базу. Скрипт совместим с системным Bash 3.2 и не требует Docker.
 
-`tools/run` требует предварительного успешного `tools/build`, применяет миграции и одновременно запускает API на `http://127.0.0.1:5166` и Angular на `http://127.0.0.1:4200`. Нажатие Ctrl+C останавливает оба процесса. Рабочая база остаётся в `src/Api/data/t-retro.db`.
+`tools/run.sh` требует предварительного успешного `tools/build.sh`, применяет миграции и одновременно запускает API на `http://127.0.0.1:5166` и Angular на `http://127.0.0.1:4200`. Нажатие Ctrl+C останавливает оба процесса. Рабочая база остаётся в `src/Api/data/t-retro.db`.
 
 В Development SignalR подключается напрямую к API на порт 5166. CORS с credentials разрешён только для `localhost:4200` и `127.0.0.1:4200`; Vite проксирует HTTP `/api`, `/health` и `/openapi`, но не выступает WebSocket-прокси. При закрытии страницы приложение останавливает SignalR через `pagehide`. Production использует same-origin без dev-CORS.
 
-Тот же `tools/build` запускается в GitHub Actions из [.github/workflows/ci.yml](.github/workflows/ci.yml) на `ubuntu-latest` x86_64 для каждого push и pull request. Workflow использует `actions/setup-dotnet`, `actions/setup-node` и отдельно устанавливает npm 12.1.0. Секреты и внешняя БД для текущих SQLite-проверок не нужны. [Успешный запуск на Ubuntu](https://github.com/yafarkin/t-retro/actions/runs/45240085578) подтвердил все шаги сборки и тестов для `0d7d324`.
+Тот же `tools/build.sh` запускается в GitHub Actions из [.github/workflows/ci.yml](.github/workflows/ci.yml) на `ubuntu-latest` x86_64 для каждого push и pull request. Workflow использует `actions/setup-dotnet`, `actions/setup-node` и отдельно устанавливает npm 12.1.0. Секреты и внешняя БД для текущих SQLite-проверок не нужны. [Успешный запуск на Ubuntu](https://github.com/yafarkin/t-retro/actions/runs/45240085578) подтвердил все шаги сборки и тестов для `0d7d324`.
 
 ## Ручной запуск
 
