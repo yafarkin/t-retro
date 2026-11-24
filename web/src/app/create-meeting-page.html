@@ -1,146 +1,130 @@
 <main class="canvas">
-  <div class="panel">
-    @if (step() === 'meeting') {
-      <header class="panel-header">
-        <div>
-          <button class="back" tuiButton appearance="flat" size="s" type="button" [disabled]="busy()"
-            (click)="backToTemplates()">← К шаблонам</button>
-          <h1 #stepHeading tabindex="-1">Новая встреча</h1>
-        </div>
-        <a class="close" routerLink="/" aria-label="Закрыть создание встречи">×</a>
-      </header>
-
-      @if (error(); as message) {
-        <p class="error" role="alert">{{ message }}</p>
-      }
-
-      <div class="settings">
-        <app-meeting-form
-          [(name)]="name"
-          [(columns)]="columns"
-          [(anonymousCards)]="anonymousCards"
-          [(privateCollection)]="privateCollection"
-          [(anonymousVotes)]="anonymousVotes"
-          [(voteSettings)]="voteSettings"
-          [busy]="busy()"
-          submitLabel="Создать встречу"
-          (submitted)="create()" />
-      </div>
-    } @else if (step() === 'personal-template') {
-      <header class="panel-header">
-        <div>
-          <h1 #stepHeading tabindex="-1">Новый личный шаблон</h1>
-          <p>Задайте название, цвета и порядок колонок.</p>
-        </div>
-        <button class="close" type="button" [disabled]="savingTemplate()" (click)="backToTemplates()"
-          aria-label="Закрыть редактор шаблона">×</button>
-      </header>
-
-      <form (ngSubmit)="savePersonalTemplate()">
-        <fieldset class="template-fields" [disabled]="savingTemplate()">
-          <label for="personal-template-name">Название шаблона</label>
-          <div class="template-name">
-            <tui-textfield [class.field-invalid]="personalNameError()">
-              <input id="personal-template-name" tuiTextfield name="personalName" [(ngModel)]="personalName"
-                [attr.aria-invalid]="personalNameError() ? true : null"
-                [attr.aria-describedby]="personalNameError() ? 'personal-template-name-error' : null"
-                placeholder="Например, ретро после релиза" required maxlength="120" />
-            </tui-textfield>
-            @if (personalNameError(); as message) {
-              <p class="field-error" id="personal-template-name-error" role="alert">{{ message }}</p>
-            }
+  @if (step() === 'meeting') {
+    <app-meeting-setup [(name)]="name" [(columns)]="columns" [(options)]="options"
+      [templateName]="meetingTemplateName()" [busy]="busy()" [error]="error()"
+      (changeTemplate)="backToTemplates()" (submitted)="create()" />
+  } @else {
+    <div class="panel">
+      @if (step() === 'personal-template') {
+        <header class="panel-header">
+          <div>
+            <h1 #stepHeading tabindex="-1">Новый личный шаблон</h1>
+            <p>Задайте название, цвета и порядок колонок.</p>
           </div>
+          <button class="close" type="button" [disabled]="savingTemplate()" (click)="backToTemplates()"
+            aria-label="Закрыть редактор шаблона">×</button>
+        </header>
 
-          <h2>Колонки</h2>
-          <app-columns-editor [cards]="true" [showErrors]="personalSubmitted()" [(columns)]="personalColumns" />
-        </fieldset>
+        <form (ngSubmit)="savePersonalTemplate()">
+          <fieldset class="template-fields" [disabled]="savingTemplate()">
+            <label for="personal-template-name">Название шаблона</label>
+            <div class="template-name">
+              <tui-textfield [class.field-invalid]="personalNameError()">
+                <input id="personal-template-name" tuiTextfield name="personalName" [(ngModel)]="personalName"
+                  [attr.aria-invalid]="personalNameError() ? true : null"
+                  [attr.aria-describedby]="personalNameError() ? 'personal-template-name-error' : null"
+                  placeholder="Например, ретро после релиза" required maxlength="120" />
+              </tui-textfield>
+              @if (personalNameError(); as message) {
+                <p class="field-error" id="personal-template-name-error" role="alert">{{ message }}</p>
+              }
+            </div>
 
-        @if (saveError(); as message) {
-          <p class="error save-error" role="alert">{{ message }}</p>
-        }
+            <h2>Колонки</h2>
+            <app-columns-editor [cards]="true" [showErrors]="personalSubmitted()" [(columns)]="personalColumns" />
+          </fieldset>
+
+          @if (saveError(); as message) {
+            <p class="error save-error" role="alert">{{ message }}</p>
+          }
+
+          <footer class="panel-footer">
+            <button tuiButton type="button" appearance="secondary" [disabled]="savingTemplate()"
+              (click)="backToTemplates()">Отмена</button>
+            <button tuiButton type="submit" [disabled]="savingTemplate()">
+              {{ savingTemplate() ? 'Сохраняем…' : 'Сохранить шаблон' }}
+            </button>
+          </footer>
+        </form>
+      } @else {
+        <header class="panel-header">
+          <div>
+            <h1 #stepHeading tabindex="-1">Шаблоны ретро</h1>
+            <p>{{ meetingTemplateName() ? 'Выбор шаблона заменит колонки новой встречи.' : 'Выберите шаблон для новой встречи' }}</p>
+          </div>
+          @if (meetingTemplateName()) {
+            <button class="close" type="button" aria-label="Отменить смену шаблона" (click)="cancelTemplateChange()">×</button>
+          } @else {
+            <a class="close" routerLink="/" aria-label="Закрыть выбор шаблона">×</a>
+          }
+        </header>
+
+        <div class="picker">
+          <section class="categories" aria-labelledby="categories-heading">
+            <h2 id="categories-heading">Категории</h2>
+            <div class="choices">
+              @for (item of categories; track item.id) {
+                <button class="choice" type="button" [attr.aria-pressed]="category() === item.id"
+                  (click)="selectCategory(item.id)">{{ item.label }}</button>
+              }
+            </div>
+          </section>
+
+          <section aria-labelledby="templates-heading">
+            <h2 id="templates-heading">Шаблоны</h2>
+            <div class="choices">
+              @for (template of templates(); track template.id) {
+                <button class="choice" type="button" [attr.aria-pressed]="selectedTemplate()?.id === template.id"
+                  (click)="selectedId.set(template.id)">{{ template.name }}</button>
+              } @empty {
+                @if (loadingTemplates()) {
+                  <p role="status">Загружаем шаблоны…</p>
+                } @else if (templateError(); as message) {
+                  <p class="error" role="alert">{{ message }}</p>
+                } @else {
+                  <p class="muted">{{ category() === 'personal' ? 'У вас пока нет личных шаблонов.' : 'Общих шаблонов пока нет.' }}</p>
+                }
+              }
+            </div>
+          </section>
+
+          @if (selectedTemplate(); as template) {
+            <section class="preview" aria-labelledby="preview-heading">
+              <h2 id="preview-heading">Предпросмотр</h2>
+              <div class="sample">
+                <h3>{{ template.name }}</h3>
+                <div class="sample-board" aria-hidden="true">
+                  @for (column of template.columns; track $index) {
+                    <div class="sample-column" [style.--column-color]="column.color">
+                      <span></span><span></span>
+                    </div>
+                  }
+                </div>
+              </div>
+              <ul class="column-list" aria-label="Колонки шаблона">
+                @for (column of template.columns; track $index) {
+                  <li>
+                    <span class="column-label" [style.--column-color]="column.color">{{ column.name }}</span>
+                    @if (column.description; as description) {
+                      <p class="column-hint">{{ description }}</p>
+                    }
+                  </li>
+                }
+              </ul>
+              @if (template.description; as description) {
+                <p class="description">{{ description }}</p>
+              }
+            </section>
+          }
+        </div>
 
         <footer class="panel-footer">
-          <button tuiButton type="button" appearance="secondary" [disabled]="savingTemplate()"
-            (click)="backToTemplates()">Отмена</button>
-          <button tuiButton type="submit" [disabled]="savingTemplate()">
-            {{ savingTemplate() ? 'Сохраняем…' : 'Сохранить шаблон' }}
-          </button>
+          <button tuiButton type="button" appearance="secondary" (click)="newPersonalTemplate()">Создать личный шаблон</button>
+          @if (selectedTemplate(); as template) {
+            <button tuiButton type="button" (click)="useTemplate(template)">Выбрать шаблон</button>
+          }
         </footer>
-      </form>
-    } @else {
-      <header class="panel-header">
-        <div>
-          <h1 #stepHeading tabindex="-1">Шаблоны ретро</h1>
-          <p>Выберите шаблон для новой встречи</p>
-        </div>
-        <a class="close" routerLink="/" aria-label="Закрыть выбор шаблона">×</a>
-      </header>
-
-      <div class="picker">
-        <section class="categories" aria-labelledby="categories-heading">
-          <h2 id="categories-heading">Категории</h2>
-          <div class="choices">
-            @for (item of categories; track item.id) {
-              <button class="choice" type="button" [attr.aria-pressed]="category() === item.id"
-                (click)="selectCategory(item.id)">{{ item.label }}</button>
-            }
-          </div>
-        </section>
-
-        <section aria-labelledby="templates-heading">
-          <h2 id="templates-heading">Шаблоны</h2>
-          <div class="choices">
-            @for (template of templates(); track template.id) {
-              <button class="choice" type="button" [attr.aria-pressed]="selectedTemplate()?.id === template.id"
-                (click)="selectedId.set(template.id)">{{ template.name }}</button>
-            } @empty {
-              @if (loadingTemplates()) {
-                <p role="status">Загружаем шаблоны…</p>
-              } @else if (templateError(); as message) {
-                <p class="error" role="alert">{{ message }}</p>
-              } @else {
-                <p class="muted">{{ category() === 'personal' ? 'У вас пока нет личных шаблонов.' : 'Общих шаблонов пока нет.' }}</p>
-              }
-            }
-          </div>
-        </section>
-
-        @if (selectedTemplate(); as template) {
-          <section class="preview" aria-labelledby="preview-heading">
-            <h2 id="preview-heading">Предпросмотр</h2>
-            <div class="sample">
-              <h3>{{ template.name }}</h3>
-              <div class="sample-board" aria-hidden="true">
-                @for (column of template.columns; track $index) {
-                  <div class="sample-column" [style.--column-color]="column.color">
-                    <span></span><span></span>
-                  </div>
-                }
-              </div>
-            </div>
-            <ul class="column-list" aria-label="Колонки шаблона">
-              @for (column of template.columns; track $index) {
-                <li>
-                  <span class="column-label" [style.--column-color]="column.color">{{ column.name }}</span>
-                  @if (column.description; as description) {
-                    <p class="column-hint">{{ description }}</p>
-                  }
-                </li>
-              }
-            </ul>
-            @if (template.description; as description) {
-              <p class="description">{{ description }}</p>
-            }
-          </section>
-        }
-      </div>
-
-      <footer class="panel-footer">
-        <button tuiButton type="button" appearance="secondary" (click)="newPersonalTemplate()">Создать личный шаблон</button>
-        @if (selectedTemplate(); as template) {
-          <button tuiButton type="button" (click)="useTemplate(template)">Выбрать шаблон</button>
-        }
-      </footer>
-    }
-  </div>
+      }
+    </div>
+  }
 </main>

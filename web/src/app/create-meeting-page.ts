@@ -6,9 +6,9 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { TuiButton, TuiTextfield } from '@taiga-ui/core';
 import { apiErrorMessage } from './api-error';
 import { ColumnsEditor } from './columns-editor';
-import { MeetingForm } from './meeting-form';
+import { initialMeetingOptions, MeetingSetup } from './meeting-setup';
 import { MeetingService } from './meeting.service';
-import { copyEditableColumns, defaultColumns, defaultVoteSettings, EditableColumn, MeetingSettingsPayload, TemplateVisibility } from './meeting.models';
+import { copyEditableColumns, defaultColumns, EditableColumn, MeetingSettingsPayload, TemplateVisibility } from './meeting.models';
 import { TemplateService } from './template.service';
 import { hasTemplateColumnErrors, templateNameError } from './template-validation';
 
@@ -65,7 +65,7 @@ const STANDARD_TEMPLATES: readonly TemplatePreset[] = [
 
 @Component({
   selector: 'app-create-meeting-page',
-  imports: [ColumnsEditor, FormsModule, MeetingForm, RouterLink, TuiButton, TuiTextfield],
+  imports: [ColumnsEditor, FormsModule, MeetingSetup, RouterLink, TuiButton, TuiTextfield],
   templateUrl: './create-meeting-page.html',
   styleUrl: './create-meeting-page.scss',
 })
@@ -103,12 +103,10 @@ export class CreateMeetingPage {
     this.templates().find((template) => template.id === this.selectedId()) ?? this.templates()[0],
   );
 
-  readonly name = signal('Ретро команды');
+  readonly name = signal(new Intl.DateTimeFormat('ru-RU', { dateStyle: 'long' }).format(new Date()));
+  readonly meetingTemplateName = signal('');
   readonly columns = signal(defaultColumns());
-  readonly anonymousCards = signal(true);
-  readonly privateCollection = signal(true);
-  readonly anonymousVotes = signal(true);
-  readonly voteSettings = signal(defaultVoteSettings());
+  readonly options = signal(initialMeetingOptions());
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
 
@@ -137,12 +135,17 @@ export class CreateMeetingPage {
 
   useTemplate(template: TemplatePreset): void {
     this.columns.set(copyEditableColumns(template.columns));
+    this.meetingTemplateName.set(template.name);
     this.error.set(null);
     this.showStep('meeting');
   }
 
   backToTemplates(): void {
     this.showStep('picker');
+  }
+
+  cancelTemplateChange(): void {
+    this.showStep('meeting');
   }
 
   newPersonalTemplate(): void {
@@ -174,14 +177,15 @@ export class CreateMeetingPage {
     this.savingTemplate.set(true);
     this.templateService.create({ name, columns, visibility: 'personal' }).subscribe({
       next: ({ id }) => {
+        const template = { id, name, columns, visibility: 'personal' } as const;
         this.savedTemplates.update((templates) => [
-          { id, name, columns, visibility: 'personal' },
+          template,
           ...templates.filter((template) => template.id !== id),
         ]);
         this.category.set('personal');
         this.selectedId.set(id);
         this.savingTemplate.set(false);
-        this.backToTemplates();
+        this.useTemplate(template);
       },
       error: (error: HttpErrorResponse) => {
         this.saveError.set(apiErrorMessage(error));
@@ -209,12 +213,9 @@ export class CreateMeetingPage {
 
   private payload(): MeetingSettingsPayload {
     return {
-      name: this.name(),
+      name: this.name().trim(),
       columns: this.columns(),
-      anonymousCards: this.anonymousCards(),
-      privateCollection: this.privateCollection(),
-      anonymousVotes: this.anonymousVotes(),
-      voteSettings: this.voteSettings(),
+      ...this.options(),
     };
   }
 }

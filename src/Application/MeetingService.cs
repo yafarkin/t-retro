@@ -16,6 +16,7 @@ public sealed class MeetingService(
         int votePercent,
         int voteMinimum,
         int? fixedBudget,
+        bool votingEnabled,
         CancellationToken cancellationToken)
     {
         var meetingId = Guid.NewGuid();
@@ -34,7 +35,8 @@ public sealed class MeetingService(
             1,
             1,
             now,
-            now);
+            now,
+            votingEnabled);
         var meetingColumns = CreateColumns(meetingId, columns);
         var creator = new MeetingMember(meetingId, userId, MemberStatus.Active, now, null);
         await meetings.CreateAsync(meeting, meetingColumns, creator, cancellationToken);
@@ -65,6 +67,7 @@ public sealed class MeetingService(
         int votePercent,
         int voteMinimum,
         int? fixedBudget,
+        bool? votingEnabled,
         CancellationToken cancellationToken)
     {
         var current = await access.GetAsync(userId, meetingId, true, cancellationToken);
@@ -80,6 +83,7 @@ public sealed class MeetingService(
             PrivateCollection = privacy.PrivateCollection,
             AnonymousVotes = privacy.AnonymousVotes,
             VoteSettings = ParseVoteSettings(voteMode, votePercent, voteMinimum, fixedBudget),
+            VotingEnabled = votingEnabled ?? current.Meeting.VotingEnabled,
             Version = current.Meeting.Version + 1,
             UpdatedAtUtc = DateTimeOffset.UtcNow,
         };

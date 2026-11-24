@@ -28,7 +28,7 @@ test('M4 manual groups, live moves, stub preview and drag and drop work in two c
   await first.goto(`${origin}/meetings/new`);
   await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M4 группы');
-  await first.getByRole('button', { name: 'Создать встречу' }).click();
+  await first.getByRole('button', { name: 'Создать ретро', exact: true }).click();
   await first.getByRole('button', { name: 'Показать приглашение' }).click();
   const invite = await first.getByLabel('Ссылка приглашения').inputValue();
   await second.goto(invite);

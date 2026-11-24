@@ -24,7 +24,10 @@ test('M3 private cards, readiness, late join, exclusion and phase advance synchr
   await first.goto(`${origin}/meetings/new`);
   await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M3 приватность');
-  await first.getByRole('button', { name: 'Создать встречу' }).click();
+  await first.getByRole('button', { name: 'Настройки ретро' }).click();
+  await first.getByLabel('Скрывать авторов карточек').uncheck();
+  await first.getByRole('button', { name: 'Сохранить настройки' }).click();
+  await first.getByRole('button', { name: 'Создать ретро', exact: true }).click();
   await expect(first.getByRole('heading', { name: 'Ретро M3 приватность', exact: true })).toBeVisible();
   await first.getByRole('button', { name: 'Показать приглашение' }).click();
   const invite = await first.getByLabel('Ссылка приглашения').inputValue();
@@ -40,12 +43,16 @@ test('M3 private cards, readiness, late join, exclusion and phase advance synchr
   await expect(firstColumn.getByText('Карточка ведущего', { exact: true })).toBeVisible();
 
   const secondColumn = second.getByRole('region', { name: 'Начать', exact: true });
+  await secondColumn.getByLabel('Авторство карточки').selectOption({ label: 'Анонимно' });
   await secondColumn.getByLabel('Новая карточка').fill('Секрет участника');
   await secondColumn.getByRole('button', { name: 'Добавить карточку' }).click();
   const secondOwnCard = secondColumn.locator('.card').filter({ hasText: 'Секрет участника' });
   await expect(secondOwnCard).toContainText('Моя карточка');
+  await expect(secondOwnCard).toContainText('Анонимно');
+  await expect(secondColumn.getByLabel('Авторство карточки').locator('option:checked')).toHaveText('С именем');
   await expect(firstColumn.getByText('Карточка скрыта до группировки', { exact: true })).toHaveCount(1);
   await expect(first.getByText('Секрет участника', { exact: true })).toHaveCount(0);
+  await expect(secondColumn.locator('.hidden-card')).not.toContainText('Первый M3');
 
   await secondOwnCard.getByRole('button', { name: 'Изменить', exact: true }).click();
   await secondColumn.getByLabel('Текст редактируемой карточки').fill('Обновлённый секрет');
@@ -81,6 +88,11 @@ test('M3 private cards, readiness, late join, exclusion and phase advance synchr
   await expect(second.getByLabel('Я готов')).toHaveCount(0);
   const revealedCard = firstColumn.locator('.card').filter({ has: first.getByText('Обновлённый секрет', { exact: true }) });
   await expect(revealedCard).not.toContainText('Второй M3');
+  await expect(revealedCard).toContainText('Анонимно');
+  const namedCard = secondColumn.locator('.card').filter({
+    has: second.getByText('Карточка ведущего', { exact: true }),
+  });
+  await expect(namedCard).toContainText('Первый M3');
 
   await Promise.all([firstContext, secondContext, thirdContext].map(closeContextGracefully));
 });

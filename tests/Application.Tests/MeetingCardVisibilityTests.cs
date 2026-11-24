@@ -11,7 +11,7 @@ public sealed class MeetingCardVisibilityTests
     [Theory]
     [InlineData(true, true, false, false)]
     [InlineData(true, false, true, false)]
-    [InlineData(false, true, false, true)]
+    [InlineData(false, true, false, false)]
     [InlineData(false, false, true, true)]
     public void OtherCardFollowsPrivacyMatrix(
         bool anonymousCards,
@@ -47,17 +47,21 @@ public sealed class MeetingCardVisibilityTests
         Assert.Equal(!anonymousCards, projected.AuthorId is not null);
     }
 
-    [Fact]
-    public void PrivateCollectionStopsHidingTextAfterCollect()
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    public void PrivateCollectionRevealsTextAndOnlyPermittedAuthorsAfterCollect(
+        bool anonymousCards, bool anonymous, bool expectAuthor)
     {
         var projected = MeetingCardVisibility.Project(
-            Meeting(MeetingPhase.Group, true, true),
-            Data(AuthorId),
+            Meeting(MeetingPhase.Group, anonymousCards, true),
+            Data(AuthorId, anonymous),
             ViewerId);
 
         Assert.Equal("Текст карточки", projected.Text);
-        Assert.Null(projected.AuthorId);
-        Assert.Null(projected.AuthorDisplayName);
+        Assert.Equal(expectAuthor ? AuthorId : null, projected.AuthorId);
+        Assert.Equal(expectAuthor ? "Автор" : null, projected.AuthorDisplayName);
     }
 
     private static Meeting Meeting(MeetingPhase phase, bool anonymousCards, bool privateCollection) =>
@@ -77,12 +81,12 @@ public sealed class MeetingCardVisibilityTests
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
 
-    private static CardData Data(Guid authorId)
+    private static CardData Data(Guid authorId, bool anonymous = false)
     {
         var now = DateTimeOffset.UtcNow;
         var meetingId = Guid.NewGuid();
         return new CardData(
-            Card.Create(Guid.NewGuid(), meetingId, Guid.NewGuid(), "Текст карточки", now),
+            Card.Create(Guid.NewGuid(), meetingId, Guid.NewGuid(), "Текст карточки", now, anonymous),
             authorId,
             "Автор");
     }

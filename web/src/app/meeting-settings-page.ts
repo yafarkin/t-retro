@@ -54,6 +54,7 @@ export class MeetingSettingsPage {
   readonly invite = signal<{ url: string; version: number } | null>(null);
   readonly copied = signal(false);
   readonly newCardTexts = signal<Record<string, string>>({});
+  readonly newCardAnonymity = signal<Record<string, boolean>>({});
   readonly editingCardId = signal<string | null>(null);
   readonly editingText = signal('');
   readonly proposal = signal<GroupProposal | null>(null);
@@ -78,6 +79,7 @@ export class MeetingSettingsPage {
   readonly privateCollection = signal(true);
   readonly anonymousVotes = signal(true);
   readonly voteSettings = signal(defaultVoteSettings());
+  readonly votingEnabled = signal(true);
   private formVersion = 0;
 
   constructor() {
@@ -219,6 +221,10 @@ export class MeetingSettingsPage {
     this.newCardTexts.update((texts) => ({ ...texts, [columnId]: text }));
   }
 
+  setNewCardAnonymity(columnId: string, anonymous: boolean): void {
+    this.newCardAnonymity.update((choices) => ({ ...choices, [columnId]: anonymous }));
+  }
+
   createCard(columnId: string): void {
     if (this.commandsBlocked()) {
       return;
@@ -232,9 +238,10 @@ export class MeetingSettingsPage {
     this.busy.set(true);
     this.error.set(null);
     this.notice.set(null);
-    this.meetings.createCard(this.meetingId, columnId, text).subscribe({
+    this.meetings.createCard(this.meetingId, columnId, text, this.newCardAnonymity()[columnId] ?? false).subscribe({
       next: () => {
         this.setNewCardText(columnId, '');
+        this.setNewCardAnonymity(columnId, false);
         this.busy.set(false);
         this.notice.set('Карточка добавлена.');
         void this.sync.refresh();
@@ -903,11 +910,11 @@ export class MeetingSettingsPage {
     return labels[phase];
   }
 
-  advanceLabel(phase: MeetingPhase): string {
+  advanceLabel(phase: MeetingPhase, votingEnabled: boolean): string {
     const labels: Record<MeetingPhase, string> = {
       Draft: 'Начать сбор',
       Collect: 'Перейти к группировке',
-      Group: 'Открыть голосование',
+      Group: votingEnabled ? 'Открыть голосование' : 'Перейти к обсуждению',
       Vote: 'Перейти к обсуждению',
       Discuss: 'Завершить ретро',
       Closed: 'Встреча завершена',
@@ -963,6 +970,7 @@ export class MeetingSettingsPage {
     this.privateCollection.set(state.privateCollection);
     this.anonymousVotes.set(state.anonymousVotes);
     this.voteSettings.set({ ...state.voteSettings });
+    this.votingEnabled.set(state.votingEnabled !== false);
     this.groupNames.set(Object.fromEntries(state.groups.map((group) => [group.id, group.name])));
   }
 
@@ -974,6 +982,7 @@ export class MeetingSettingsPage {
       privateCollection: this.privateCollection(),
       anonymousVotes: this.anonymousVotes(),
       voteSettings: this.voteSettings(),
+      votingEnabled: this.votingEnabled(),
     };
   }
 }

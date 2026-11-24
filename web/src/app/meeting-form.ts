@@ -16,6 +16,7 @@ export class MeetingForm {
   readonly anonymousCards = model.required<boolean>();
   readonly privateCollection = model.required<boolean>();
   readonly anonymousVotes = model.required<boolean>();
+  readonly votingEnabled = model.required<boolean>();
   readonly voteSettings = model.required<VoteSettings>();
   readonly busy = input(false);
   readonly submitLabel = input.required<string>();

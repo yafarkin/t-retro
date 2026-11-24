@@ -10,7 +10,7 @@ public static class MeetingCardVisibility
         var showText = isMine
             || meeting.Phase != MeetingPhase.Collect
             || !meeting.PrivateCollection;
-        var showAuthor = !meeting.AnonymousCards;
+        var showAuthor = showText && !meeting.AnonymousCards && !data.Card.Anonymous;
         return new MeetingCard(
             data.Card.Id,
             data.Card.ColumnId,

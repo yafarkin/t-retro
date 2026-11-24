@@ -36,6 +36,7 @@ public static class MeetingEndpoints
                 request.VoteSettings.Percent,
                 request.VoteSettings.Minimum,
                 request.VoteSettings.Fixed,
+                request.VotingEnabled ?? true,
                 cancellationToken);
             return Results.Created(
                 $"/api/meetings/{snapshot.Meeting.Id}",
@@ -79,6 +80,7 @@ public static class MeetingEndpoints
                 request.VoteSettings.Percent,
                 request.VoteSettings.Minimum,
                 request.VoteSettings.Fixed,
+                request.VotingEnabled,
                 cancellationToken);
             return Results.Ok(ApiMappings.ToResponse(snapshot));
         });

@@ -53,10 +53,11 @@ export class MeetingService {
     return this.http.put<void>(`/api/meetings/${meetingId}/facilitator`, { userId });
   }
 
-  createCard(meetingId: string, columnId: string, text: string): Observable<{ id: string; version: number }> {
+  createCard(meetingId: string, columnId: string, text: string, anonymous: boolean): Observable<{ id: string; version: number }> {
     return this.http.post<{ id: string; version: number }>(`/api/meetings/${meetingId}/cards`, {
       columnId,
       text,
+      anonymous,
       operationId: crypto.randomUUID(),
     });
   }

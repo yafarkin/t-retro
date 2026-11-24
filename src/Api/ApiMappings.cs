@@ -19,6 +19,7 @@ public static class ApiMappings
             snapshot.Meeting.AnonymousCards,
             snapshot.Meeting.PrivateCollection,
             snapshot.Meeting.AnonymousVotes,
+            snapshot.Meeting.VotingEnabled,
             new VoteSettingsResponse(
                 snapshot.Meeting.VoteSettings.Mode.ToString().ToLowerInvariant(),
                 snapshot.Meeting.VoteSettings.Percent,

@@ -78,7 +78,8 @@ public sealed record Meeting(
     int Version,
     int BoardVersion,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    bool VotingEnabled = true);
 
 public sealed record MeetingColumn(Guid Id, Guid MeetingId, string Name, string Color, int Position, string? Description = null);
 

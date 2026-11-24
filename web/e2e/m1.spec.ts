@@ -69,7 +69,8 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await second.getByRole('button', { name: 'Парусник' }).click();
   await expect(second.getByRole('list', { name: 'Колонки шаблона' })).toContainText('Риски');
   await second.getByRole('button', { name: 'Выбрать шаблон' }).click();
-  await expect(second.getByLabel('Название колонки').first()).toHaveValue('Цель');
+  await expect(second.getByRole('list', { name: 'Колонки ретро' })).toContainText('Цель');
+  await expect(second.getByLabel('Название колонки')).toHaveCount(0);
   await second.getByRole('button', { name: /К шаблонам/ }).click();
   await second.getByRole('button', { name: 'Личные' }).click();
   await expect(second.getByText('У вас пока нет личных шаблонов.')).toBeVisible();
@@ -110,7 +111,8 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await expect(second.locator('tui-textfield.field-invalid')).toHaveCSS('outline-color', 'rgb(255, 77, 77)');
   await newColumn.fill('Договорились');
   await second.getByRole('button', { name: 'Сохранить шаблон' }).click();
-  await expect(second.getByRole('button', { name: 'После релиза' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(second.getByRole('heading', { name: 'Новое ретро' })).toBeVisible();
+  await expect(second.getByText('После релиза', { exact: true })).toBeVisible();
 
   await second.reload();
   await second.getByRole('button', { name: 'Личные' }).click();
@@ -118,8 +120,12 @@ test('M1 templates, meeting, invitation and rotation work in independent context
     'Перестать', 'Улучшения', 'Договорились',
   ]);
   await second.getByRole('button', { name: 'Выбрать шаблон' }).click();
+  await second.getByRole('button', { name: 'Изменить колонки' }).click();
   await expect(second.getByLabel('Цвет колонки').nth(1)).toHaveValue('#4455aa');
   await expect(second.getByLabel('Описание колонки').nth(1)).toHaveValue('Идеи после релиза');
+  await second.getByLabel('Название колонки').first().fill('Отменённая колонка');
+  await second.getByRole('dialog').getByRole('button', { name: 'Отмена', exact: true }).click();
+  await expect(second.getByRole('list', { name: 'Колонки ретро' })).toContainText('Перестать');
   await second.getByRole('button', { name: /К шаблонам/ }).click();
 
   await third.getByRole('link', { name: 'Создать ретро' }).click();
@@ -132,9 +138,23 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await second.getByRole('button', { name: 'Общие' }).click();
   await expect(second.getByRole('list', { name: 'Колонки шаблона' })).toContainText('Что попробовать');
   await second.getByRole('button', { name: 'Выбрать шаблон' }).click();
+  await second.getByRole('button', { name: 'Изменить колонки' }).click();
   await expect(second.getByLabel('Название колонки').first()).toHaveValue('Что попробовать');
+  await second.getByLabel('Описание колонки').last().fill('Оставляем для этого ретро');
+  await second.getByRole('button', { name: 'Сохранить колонки' }).click();
+  await expect(second.getByRole('list', { name: 'Колонки ретро' })).toContainText('Оставляем для этого ретро');
   await second.getByLabel('Название встречи').fill('Ретро M1');
-  await second.getByRole('button', { name: 'Создать встречу' }).click();
+  await second.getByRole('button', { name: 'Настройки ретро' }).click();
+  await second.getByRole('button', { name: 'Голосование', exact: true }).click();
+  await expect(second.getByLabel('Голосов на человека')).toHaveValue('6');
+  await second.getByRole('switch', { name: 'Включить голосование' }).uncheck();
+  await second.getByRole('dialog').getByRole('button', { name: 'Отмена', exact: true }).click();
+  await second.getByRole('button', { name: 'Настройки ретро' }).click();
+  await second.getByRole('button', { name: 'Голосование', exact: true }).click();
+  await expect(second.getByRole('switch', { name: 'Включить голосование' })).toBeChecked();
+  await second.getByRole('switch', { name: 'Включить голосование' }).uncheck();
+  await second.getByRole('button', { name: 'Сохранить настройки' }).click();
+  await second.getByRole('button', { name: 'Создать ретро', exact: true }).click();
   await expect(second.getByRole('heading', { name: 'Ретро M1', exact: true })).toBeVisible();
 
   await first.goto(`${origin}/templates`);
@@ -147,6 +167,8 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await expect(second.getByLabel('Описание колонки').first()).toHaveValue('Что проверим в следующем цикле');
   await expect(second.getByRole('textbox', { name: 'Название колонки' }).nth(1)).toHaveValue('Перестать');
   await expect(second.getByRole('textbox', { name: 'Название колонки' }).nth(2)).toHaveValue('Продолжать');
+  await expect(second.getByLabel('Описание колонки').last()).toHaveValue('Оставляем для этого ретро');
+  await expect(second.getByLabel('Включить голосование')).not.toBeChecked();
 
   await second.getByRole('button', { name: 'Показать приглашение' }).click();
   const oldInvite = await second.getByLabel('Ссылка приглашения').inputValue();
@@ -175,6 +197,23 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   for (const page of [first, second]) {
     await expect(page.getByRole('region', { name: 'Что попробовать' })).toContainText('Что проверим в следующем цикле');
   }
+  const column = second.getByRole('region', { name: 'Что попробовать' });
+  await column.getByLabel('Новая карточка').fill('Тема без голосования');
+  await column.getByRole('button', { name: 'Добавить карточку' }).click();
+  await expect(column.getByText('Тема без голосования', { exact: true })).toBeVisible();
+  await second.getByRole('button', { name: 'Перейти к группировке' }).click();
+  await second.getByRole('button', { name: 'Перейти к обсуждению' }).click();
+  for (const page of [first, second]) {
+    await expect(page.getByRole('heading', { name: 'Текущая тема: Тема без голосования' })).toBeVisible();
+    await expect(page.locator('.discussion-queue-item')).toContainText('Всего голосов: 0');
+  }
+  second.once('dialog', (dialog) => dialog.accept());
+  await second.getByRole('button', { name: 'Завершить ретро' }).click();
+  const report = first.getByRole('link', { name: 'Скачать PDF' });
+  await expect(report).toBeVisible();
+  const pdf = await firstContext.request.get(new URL((await report.getAttribute('href'))!, origin).href);
+  expect(pdf.ok()).toBeTruthy();
+  expect((await pdf.body()).subarray(0, 5).toString()).toBe('%PDF-');
 
   await Promise.all([firstContext, secondContext, thirdContext].map(closeContextGracefully));
 });

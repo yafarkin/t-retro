@@ -31,8 +31,12 @@ test('M5 topics, live votes, late budget, open breakdown and exclusion work in i
   await first.goto(`${origin}/meetings/new`);
   await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M5 голосование');
+  await first.getByRole('button', { name: 'Настройки ретро' }).click();
   await first.getByLabel('Скрывать индивидуальные голоса').uncheck();
-  await first.getByRole('button', { name: 'Создать встречу' }).click();
+  await first.getByRole('button', { name: 'Голосование', exact: true }).click();
+  await first.getByLabel('Распределение голосов').selectOption('percent');
+  await first.getByRole('button', { name: 'Сохранить настройки' }).click();
+  await first.getByRole('button', { name: 'Создать ретро', exact: true }).click();
   await first.getByRole('button', { name: 'Показать приглашение' }).click();
   const invite = await first.getByLabel('Ссылка приглашения').inputValue();
   await second.goto(invite);

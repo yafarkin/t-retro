@@ -31,7 +31,7 @@
       @if (meeting.canManage && meeting.phase !== 'Closed') {
         <section class="facilitator-actions">
           <h2>Действия фасилитатора</h2>
-          <button tuiButton type="button" (click)="advance()" [disabled]="commandsBlocked()">{{ advanceLabel(meeting.phase) }}</button>
+          <button tuiButton type="button" (click)="advance()" [disabled]="commandsBlocked()">{{ advanceLabel(meeting.phase, meeting.votingEnabled !== false) }}</button>
         </section>
       }
 
@@ -400,6 +400,7 @@
               [(privateCollection)]="privateCollection"
               [(anonymousVotes)]="anonymousVotes"
               [(voteSettings)]="voteSettings"
+              [(votingEnabled)]="votingEnabled"
               [busy]="commandsBlocked()"
               submitLabel="Сохранить настройки"
               (submitted)="save()" />
@@ -566,6 +567,7 @@
                       <footer>
                         @if (card.isMine) { <span class="own-card">Моя карточка</span> }
                         @if (card.authorDisplayName; as author) { <span>{{ author }}</span> }
+                        @else { <span>Анонимно</span> }
                       </footer>
                     }
                     @if (meeting.phase === 'Collect' && card.isMine && editingCardId() !== card.id) {
@@ -596,6 +598,17 @@
                 }
                 @if (meeting.phase === 'Collect') {
                   <form class="new-card" (ngSubmit)="createCard(column.id)">
+                    @if (meeting.anonymousCards) {
+                      <p class="hint">Карточки в этой встрече анонимны</p>
+                    } @else {
+                      <label>Авторство карточки
+                        <select [ngModel]="newCardAnonymity()[column.id] ?? false"
+                          (ngModelChange)="setNewCardAnonymity(column.id, $event)" [name]="'anonymous-' + column.id">
+                          <option [ngValue]="false">С именем</option>
+                          <option [ngValue]="true">Анонимно</option>
+                        </select>
+                      </label>
+                    }
                     <label>
                       <span>Новая карточка</span>
                       <textarea

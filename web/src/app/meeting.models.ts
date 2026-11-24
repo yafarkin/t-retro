@@ -26,6 +26,7 @@ export interface MeetingSettingsPayload {
   anonymousCards: boolean;
   privateCollection: boolean;
   anonymousVotes: boolean;
+  votingEnabled?: boolean;
   voteSettings: VoteSettings;
 }
 

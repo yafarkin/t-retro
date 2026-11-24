@@ -36,6 +36,7 @@ public sealed class CardAndPhaseRulesTests
         Assert.Equal(MeetingPhase.Collect, MeetingPhaseRules.Next(MeetingPhase.Draft));
         Assert.Equal(MeetingPhase.Group, MeetingPhaseRules.Next(MeetingPhase.Collect));
         Assert.Equal(MeetingPhase.Vote, MeetingPhaseRules.Next(MeetingPhase.Group));
+        Assert.Equal(MeetingPhase.Discuss, MeetingPhaseRules.Next(MeetingPhase.Group, votingEnabled: false));
         Assert.Equal(MeetingPhase.Discuss, MeetingPhaseRules.Next(MeetingPhase.Vote));
         Assert.Equal(MeetingPhase.Closed, MeetingPhaseRules.Next(MeetingPhase.Discuss));
         Assert.Throws<DomainValidationException>(() => MeetingPhaseRules.Next(MeetingPhase.Closed));

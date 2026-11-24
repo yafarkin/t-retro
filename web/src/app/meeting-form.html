@@ -12,27 +12,37 @@
   <fieldset>
     <legend>Конфиденциальность</legend>
     <label class="check"><input type="checkbox" name="anonymousCards" [(ngModel)]="anonymousCards" /> Скрывать авторов карточек</label>
-    <label class="check"><input type="checkbox" name="privateCollection" [(ngModel)]="privateCollection" /> Скрывать чужие тексты во время сбора</label>
+    <label for="collection-visibility">Видимость во время сбора</label>
+    <select id="collection-visibility" name="privateCollection" [(ngModel)]="privateCollection">
+      <option [ngValue]="false">Открытый сбор</option>
+      <option [ngValue]="true">Закрытый сбор</option>
+    </select>
+    <p class="hint">В закрытом сборе видны только заглушки чужих карточек в их колонках. После сбора тексты открываются, анонимность авторов сохраняется.</p>
     <label class="check"><input type="checkbox" name="anonymousVotes" [(ngModel)]="anonymousVotes" /> Скрывать индивидуальные голоса</label>
     <p class="hint">Настройки конфиденциальности фиксируются после выхода из подготовки.</p>
   </fieldset>
 
   <fieldset>
     <legend>Бюджет голосов</legend>
-    <label for="vote-mode">Способ расчёта</label>
-    <select id="vote-mode" name="voteMode" [(ngModel)]="voteSettings().mode">
-      <option value="percent">Процент от числа карточек</option>
-      <option value="fixed">Фиксированный бюджет</option>
-    </select>
+    <label class="check"><input type="checkbox" name="votingEnabled" [(ngModel)]="votingEnabled" /> Включить голосование</label>
+    @if (votingEnabled()) {
+      <label for="vote-mode">Способ расчёта</label>
+      <select id="vote-mode" name="voteMode" [(ngModel)]="voteSettings().mode">
+        <option value="percent">Процент от числа карточек</option>
+        <option value="fixed">Фиксированный бюджет</option>
+      </select>
 
-    @if (voteSettings().mode === 'percent') {
-      <div class="numbers">
-        <label>Процент P <input type="number" name="votePercent" min="0" max="100" required [(ngModel)]="voteSettings().percent" /></label>
-        <label>Минимум M <input type="number" name="voteMinimum" min="1" required [(ngModel)]="voteSettings().minimum" /></label>
-      </div>
-      <p class="hint">B = max(M, ceil(N × P / 100)). Исходные значения: P = 5, M = 2.</p>
+      @if (voteSettings().mode === 'percent') {
+        <div class="numbers">
+          <label>Процент P <input type="number" name="votePercent" min="0" max="100" required [(ngModel)]="voteSettings().percent" /></label>
+          <label>Минимум M <input type="number" name="voteMinimum" min="1" required [(ngModel)]="voteSettings().minimum" /></label>
+        </div>
+        <p class="hint">B = max(M, ceil(N × P / 100)). Исходные значения: P = 5, M = 2.</p>
+      } @else {
+        <label>Голосов на человека <input type="number" name="voteFixed" min="1" required [(ngModel)]="voteSettings().fixed" /></label>
+      }
     } @else {
-      <label>Голосов на человека <input type="number" name="voteFixed" min="1" required [(ngModel)]="voteSettings().fixed" /></label>
+      <p class="hint">После группировки встреча перейдёт к обсуждению.</p>
     }
   </fieldset>
 

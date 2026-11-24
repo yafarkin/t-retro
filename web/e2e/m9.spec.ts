@@ -28,7 +28,7 @@ test('M9 two participants close a meeting and download the same PDF from a perma
   await first.goto(`${origin}/meetings/new`);
   await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M9 завершение');
-  await first.getByRole('button', { name: 'Создать встречу' }).click();
+  await first.getByRole('button', { name: 'Создать ретро', exact: true }).click();
   await first.getByRole('button', { name: 'Показать приглашение' }).click();
   const invite = await first.getByLabel('Ссылка приглашения').inputValue();
   await second.goto(invite);

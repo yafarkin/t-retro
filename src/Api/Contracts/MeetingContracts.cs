@@ -47,6 +47,8 @@ public class MeetingSettingsRequest
     public bool AnonymousVotes { get; set; } = true;
 
     public VoteSettingsRequest VoteSettings { get; set; } = new();
+
+    public bool? VotingEnabled { get; set; }
 }
 
 public sealed class UpdateMeetingSettingsRequest : MeetingSettingsRequest
@@ -192,6 +194,7 @@ public sealed record MeetingStateResponse(
     bool AnonymousCards,
     bool PrivateCollection,
     bool AnonymousVotes,
+    bool VotingEnabled,
     VoteSettingsResponse VoteSettings,
     IReadOnlyList<ColumnResponse> Columns,
     IReadOnlyList<ParticipantResponse> Participants,
@@ -303,6 +306,8 @@ public sealed class CreateCardRequest
     public Guid ColumnId { get; set; }
 
     public string? Text { get; set; }
+
+    public bool Anonymous { get; set; }
 
     public Guid OperationId { get; set; }
 }
