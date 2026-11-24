@@ -69,7 +69,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 Guid.Parse(row.MeetingId),
                 row.Name,
                 row.Color,
-                row.Position))
+                row.Position,
+                row.Description))
             .ToArray();
         var participants = (await connection.QueryAsync<ParticipantRow>(
             """
@@ -1466,8 +1467,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         {
             await connection.ExecuteAsync(
                 """
-                INSERT INTO columns (meeting_id, id, name, color, position)
-                VALUES (@MeetingId, @Id, @Name, @Color, @Position);
+                INSERT INTO columns (meeting_id, id, name, color, position, description)
+                VALUES (@MeetingId, @Id, @Name, @Color, @Position, @Description);
                 """,
                 new
                 {
@@ -1476,6 +1477,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                     column.Name,
                     column.Color,
                     column.Position,
+                    column.Description,
                 },
                 transaction);
         }
@@ -1537,6 +1539,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         public required string Id { get; init; }
         public required string Name { get; init; }
         public required string Color { get; init; }
+        public string? Description { get; init; }
         public int Position { get; init; }
     }
 

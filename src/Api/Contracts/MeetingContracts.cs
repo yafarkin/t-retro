@@ -7,6 +7,8 @@ public sealed class ColumnRequest
     public string? Name { get; set; }
 
     public string? Color { get; set; }
+
+    public string? Description { get; set; }
 }
 
 public class VoteSettingsRequest
@@ -70,7 +72,8 @@ public sealed record ColumnResponse(
     string Id,
     string Name,
     string Color,
-    int Position);
+    int Position,
+    string? Description);
 
 public sealed record ParticipantResponse(
     string Id,

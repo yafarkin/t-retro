@@ -19,6 +19,7 @@ test('M2 presence, live state, role transfer and access revocation synchronize c
   await login(first, origin, 'm2-first', 'Первый M2');
   await login(second, origin, 'm2-second', 'Второй M2');
   await first.goto(`${origin}/meetings/new`);
+  await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M2 realtime');
   await first.getByRole('button', { name: 'Создать встречу' }).click();
   await expect(first.getByRole('heading', { name: 'Ретро M2 realtime', exact: true })).toBeVisible();

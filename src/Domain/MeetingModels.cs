@@ -80,7 +80,7 @@ public sealed record Meeting(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc);
 
-public sealed record MeetingColumn(Guid Id, Guid MeetingId, string Name, string Color, int Position);
+public sealed record MeetingColumn(Guid Id, Guid MeetingId, string Name, string Color, int Position, string? Description = null);
 
 public sealed record MeetingGroup(Guid Id, Guid MeetingId, Guid ColumnId, string Name);
 
@@ -105,4 +105,4 @@ public sealed record MeetingTemplate(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc);
 
-public sealed record TemplateColumn(Guid Id, Guid TemplateId, string Name, string Color, int Position);
+public sealed record TemplateColumn(Guid Id, Guid TemplateId, string Name, string Color, int Position, string? Description = null);

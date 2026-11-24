@@ -22,6 +22,7 @@ test('M3 private cards, readiness, late join, exclusion and phase advance synchr
   await login(second, origin, 'm3-second', 'Второй M3');
   await login(third, origin, 'm3-third', 'Третий M3');
   await first.goto(`${origin}/meetings/new`);
+  await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M3 приватность');
   await first.getByRole('button', { name: 'Создать встречу' }).click();
   await expect(first.getByRole('heading', { name: 'Ретро M3 приватность', exact: true })).toBeVisible();

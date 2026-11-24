@@ -88,7 +88,7 @@ public sealed class TemplateService(ITemplateRepository templates)
         return inputs.Select((input, position) =>
         {
             var (name, color) = ColumnRules.Validate(input.Name, input.Color);
-            return new TemplateColumn(Guid.NewGuid(), templateId, name, color, position);
+            return new TemplateColumn(Guid.NewGuid(), templateId, name, color, position, ColumnRules.Description(input.Description));
         }).ToArray();
     }
 

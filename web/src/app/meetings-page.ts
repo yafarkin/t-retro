@@ -1,28 +1,30 @@
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
-import { TuiButton } from '@taiga-ui/core';
+import { RouterLink } from '@angular/router';
 import { apiErrorMessage } from './api-error';
-import { AuthService } from './auth.service';
 import { MeetingPhase, MeetingSummary } from './meeting.models';
 import { MeetingService } from './meeting.service';
+import { WorkspaceLayout } from './workspace-layout';
 
 @Component({
   selector: 'app-meetings-page',
-  imports: [DatePipe, RouterLink, TuiButton],
+  imports: [DatePipe, RouterLink, WorkspaceLayout],
   templateUrl: './meetings-page.html',
   styleUrl: './meetings-page.scss',
 })
 export class MeetingsPage {
   private readonly meetingsService = inject(MeetingService);
-  private readonly router = inject(Router);
-  readonly auth = inject(AuthService);
   readonly meetings = signal<MeetingSummary[]>([]);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
-  readonly active = computed(() => this.meetings().filter((meeting) => meeting.phase !== 'Closed'));
-  readonly closed = computed(() => this.meetings().filter((meeting) => meeting.phase === 'Closed'));
+  readonly meetingGroups = computed(() => {
+    const meetings = this.meetings();
+    return [
+      { title: 'Активные', meetings: meetings.filter((meeting) => meeting.phase !== 'Closed') },
+      { title: 'Завершённые', meetings: meetings.filter((meeting) => meeting.phase === 'Closed') },
+    ].filter((group) => group.meetings.length > 0);
+  });
 
   constructor() {
     this.meetingsService.list().subscribe({
@@ -47,9 +49,5 @@ export class MeetingsPage {
       Closed: 'Завершена',
     };
     return names[phase];
-  }
-
-  logout(): void {
-    this.auth.logout().subscribe(() => this.router.navigateByUrl('/login'));
   }
 }

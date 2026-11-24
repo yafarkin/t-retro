@@ -112,7 +112,7 @@ public sealed class MeetingService(
         return inputs.Select((input, position) =>
         {
             var (name, color) = ColumnRules.Validate(input.Name, input.Color);
-            return new MeetingColumn(Guid.NewGuid(), meetingId, name, color, position);
+            return new MeetingColumn(Guid.NewGuid(), meetingId, name, color, position, ColumnRules.Description(input.Description));
         }).ToArray();
     }
 

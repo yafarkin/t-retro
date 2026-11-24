@@ -157,8 +157,8 @@ public sealed class SqliteTemplateRepository(SqliteConnectionFactory connections
         {
             await connection.ExecuteAsync(
                 """
-                INSERT INTO template_columns (template_id, id, name, color, position)
-                VALUES (@TemplateId, @Id, @Name, @Color, @Position);
+                INSERT INTO template_columns (template_id, id, name, color, position, description)
+                VALUES (@TemplateId, @Id, @Name, @Color, @Position, @Description);
                 """,
                 new
                 {
@@ -167,6 +167,7 @@ public sealed class SqliteTemplateRepository(SqliteConnectionFactory connections
                     column.Name,
                     column.Color,
                     column.Position,
+                    column.Description,
                 },
                 transaction);
         }
@@ -187,7 +188,8 @@ public sealed class SqliteTemplateRepository(SqliteConnectionFactory connections
             Guid.Parse(row.TemplateId),
             row.Name,
             row.Color,
-            row.Position);
+            row.Position,
+            row.Description);
 
     private sealed class TemplateRow
     {
@@ -205,6 +207,7 @@ public sealed class SqliteTemplateRepository(SqliteConnectionFactory connections
         public required string Id { get; init; }
         public required string Name { get; init; }
         public required string Color { get; init; }
+        public string? Description { get; init; }
         public int Position { get; init; }
     }
 }

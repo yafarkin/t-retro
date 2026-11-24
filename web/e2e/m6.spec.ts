@@ -35,6 +35,7 @@ test('M6 ranked queue, shared navigation, decisions, comments and actions work i
   await login(first, origin, 'm6-first', 'Первый M6');
   await login(second, origin, 'm6-second', 'Второй M6');
   await first.goto(`${origin}/meetings/new`);
+  await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M6 обсуждение');
   await first.getByRole('button', { name: 'Создать встречу' }).click();
   await first.getByRole('button', { name: 'Показать приглашение' }).click();

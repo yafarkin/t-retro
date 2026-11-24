@@ -1,3 +1,65 @@
 body {
   margin: 0;
 }
+
+tui-root[tuiTheme] {
+  --brand-yellow: #ffdd2d;
+  --brand-ink: #292929;
+  --ink: #222;
+  --muted: #62676f;
+  --line: #dfe1e5;
+  --paper: #f3f4f6;
+  --surface: #fff;
+  --accent: #4c3c00;
+  --accent-soft: #fff4bc;
+  --accent-hover: #ffed94;
+  --accent-line: #ebcd44;
+  --tui-background-base: var(--surface);
+  --tui-background-base-alt: var(--paper);
+  --tui-background-elevation-1: var(--surface);
+  --tui-background-accent-1: var(--brand-yellow);
+  --tui-background-accent-1-hover: #ffcf21;
+  --tui-background-accent-1-pressed: #f0bf10;
+  --tui-text-primary-on-accent-1: var(--brand-ink);
+  --tui-text-primary: var(--ink);
+  --tui-text-secondary: var(--muted);
+  --tui-text-action: #1263c7;
+  --tui-text-action-hover: #004ca8;
+  --tui-border-focus: #1263c7;
+}
+
+tui-root[tuiTheme='dark'] {
+  --ink: #f5f5f6;
+  --muted: #b1b4bc;
+  --line: #414248;
+  --paper: #191a1d;
+  --surface: #25262a;
+  --accent: #ffe171;
+  --accent-soft: #3f361b;
+  --accent-hover: #514521;
+  --accent-line: #6e5c28;
+  --tui-text-action: #9abfff;
+  --tui-text-action-hover: #c1d8ff;
+  --tui-border-focus: #9abfff;
+}
+
+.column-label::before {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-inline-end: 0.55rem;
+  border-radius: 50%;
+  background: var(--column-color);
+  content: '';
+}
+
+tui-textfield.field-invalid,
+textarea.field-invalid {
+  outline: 2px solid var(--tui-status-negative);
+  outline-offset: -1px;
+}
+
+.field-error[role='alert'] {
+  margin: 0.35rem 0 0;
+  color: var(--tui-status-negative);
+}

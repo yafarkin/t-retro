@@ -2,7 +2,7 @@ using Domain;
 
 namespace Application;
 
-public sealed record ColumnInput(string? Name, string? Color);
+public sealed record ColumnInput(string? Name, string? Color, string? Description = null);
 
 public sealed record PrivacyInput(bool AnonymousCards, bool PrivateCollection, bool AnonymousVotes);
 

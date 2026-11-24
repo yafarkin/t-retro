@@ -19,6 +19,7 @@ test('M8 mock Jira export shares created status and locks the action in two cont
   await login(first, origin, 'm8-first', 'Первый M8');
   await login(second, origin, 'm8-second', 'Второй M8');
   await first.goto(`${origin}/meetings/new`);
+  await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M8 mock Jira');
   await first.getByRole('button', { name: 'Создать встречу' }).click();
   await expect(first.getByRole('heading', { name: 'Ретро M8 mock Jira' })).toBeVisible();

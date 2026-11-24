@@ -5,6 +5,7 @@ export type TemplateVisibility = 'personal' | 'shared';
 export interface EditableColumn {
   name: string;
   color: string;
+  description?: string | null;
 }
 
 export interface Column extends EditableColumn {
@@ -200,10 +201,14 @@ export interface MeetingTemplate {
 
 export function defaultColumns(): EditableColumn[] {
   return [
-    { name: 'Начать', color: '#36A269' },
-    { name: 'Перестать', color: '#D34E4E' },
-    { name: 'Продолжать', color: '#4C86D9' },
+    { name: 'Начать', color: '#36A269', description: 'Практики, которые стоит попробовать' },
+    { name: 'Перестать', color: '#D34E4E', description: 'Практики, от которых стоит отказаться' },
+    { name: 'Продолжать', color: '#4C86D9', description: 'Практики, которые стоит сохранить' },
   ];
+}
+
+export function copyEditableColumns(columns: readonly EditableColumn[]): EditableColumn[] {
+  return columns.map(({ name, color, description }) => ({ name, color, description }));
 }
 
 export function defaultVoteSettings(): VoteSettings {

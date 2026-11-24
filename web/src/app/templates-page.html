@@ -1,64 +1,74 @@
-<main class="page">
-  <a routerLink="/">← Мои встречи</a>
-  <h1>Шаблоны колонок</h1>
+<app-workspace-layout>
+  <main class="page">
+    <h1>Шаблоны колонок</h1>
 
-  @if (error(); as message) {
-    <p class="error" role="alert">{{ message }}</p>
-  }
-  @if (notice(); as message) {
-    <p class="notice" role="status">{{ message }}</p>
-  }
+    @if (error(); as message) {
+      <p class="error" role="alert">{{ message }}</p>
+    }
 
-  <section>
-    <h2>{{ selectedId() ? 'Изменение шаблона' : 'Новый шаблон' }}</h2>
-    <form #templateForm="ngForm" (ngSubmit)="templateForm.valid && save()">
-      <label for="template-name">Название</label>
-      <tui-textfield>
-        <input id="template-name" tuiTextfield name="name" [(ngModel)]="name" required maxlength="120" />
-      </tui-textfield>
-
-      <label for="visibility">Видимость</label>
-      <select id="visibility" name="visibility" [(ngModel)]="visibility">
-        <option value="personal">Личный</option>
-        <option value="shared">Общий</option>
-      </select>
-
-      <app-columns-editor [(columns)]="columns" />
-
-      <div class="actions">
-        <button tuiButton type="submit" [disabled]="busy()">{{ selectedId() ? 'Сохранить изменения' : 'Создать шаблон' }}</button>
-        @if (selectedId()) {
-          <button tuiButton type="button" appearance="secondary" (click)="reset()">Отменить изменение</button>
+    <section>
+      <h2>Доступные шаблоны</h2>
+      @if (templates().length === 0) {
+        <p>Шаблонов пока нет.</p>
+      }
+      <div class="catalog">
+        @for (template of templates(); track template.id) {
+          <article>
+            <header>
+              <h3>{{ template.name }}</h3>
+              <span>{{ template.visibility === 'shared' ? 'Общий' : 'Личный' }}</span>
+            </header>
+            <div class="columns">
+              @for (column of template.columns; track column.id) {
+                <span class="column-label" [style.--column-color]="column.color">{{ column.name }}</span>
+              }
+            </div>
+            @if (template.ownerId === auth.user()?.id) {
+              <div class="actions">
+                <button tuiButton type="button" appearance="secondary" (click)="edit(template)">Изменить</button>
+                <button tuiButton type="button" appearance="secondary" (click)="delete(template)">Удалить</button>
+              </div>
+            }
+          </article>
         }
       </div>
-    </form>
-  </section>
+    </section>
 
-  <section>
-    <h2>Доступные шаблоны</h2>
-    @if (templates().length === 0) {
-      <p>Шаблонов пока нет.</p>
-    }
-    <div class="catalog">
-      @for (template of templates(); track template.id) {
-        <article>
-          <header>
-            <h3>{{ template.name }}</h3>
-            <span>{{ template.visibility === 'shared' ? 'Общий' : 'Личный' }}</span>
-          </header>
-          <div class="columns">
-            @for (column of template.columns; track column.id) {
-              <span [style.color]="column.color">{{ column.name }}</span>
-            }
-          </div>
-          @if (template.ownerId === auth.user()?.id) {
-            <div class="actions">
-              <button tuiButton type="button" appearance="secondary" (click)="edit(template)">Изменить</button>
-              <button tuiButton type="button" appearance="secondary" (click)="delete(template)">Удалить</button>
-            </div>
-          }
-        </article>
+    <section>
+      <h2>{{ selectedId() ? 'Изменение шаблона' : 'Новый шаблон' }}</h2>
+      @if (notice(); as message) {
+        <p class="notice" role="status">{{ message }}</p>
       }
-    </div>
-  </section>
-</main>
+      <form (ngSubmit)="save()">
+        <div class="name-field">
+          <label for="template-name">Название шаблона</label>
+          <tui-textfield [class.field-invalid]="nameError()">
+            <input #nameField id="template-name" tuiTextfield name="name" [(ngModel)]="name"
+              [attr.aria-invalid]="nameError() ? true : null"
+              [attr.aria-describedby]="nameError() ? 'template-name-error' : null"
+              placeholder="Например, ретро после релиза" required maxlength="120" />
+          </tui-textfield>
+          @if (nameError(); as message) {
+            <p class="field-error" id="template-name-error" role="alert">{{ message }}</p>
+          }
+        </div>
+
+        <label for="visibility">Видимость</label>
+        <select id="visibility" name="visibility" [(ngModel)]="visibility">
+          <option value="personal">Личный</option>
+          <option value="shared">Общий</option>
+        </select>
+
+        <app-columns-editor [cards]="true" [showErrors]="submitted()" [(columns)]="columns" />
+
+        <div class="actions">
+          <button tuiButton type="submit" [disabled]="busy()">{{ selectedId() ? 'Сохранить изменения' : 'Создать шаблон' }}</button>
+          @if (selectedId()) {
+            <button tuiButton type="button" appearance="secondary" (click)="reset()">Отменить изменение</button>
+          }
+        </div>
+      </form>
+    </section>
+
+  </main>
+</app-workspace-layout>

@@ -68,5 +68,6 @@ public static class TemplateEndpoints
                 column.Id.ToString(),
                 column.Name,
                 column.Color,
-                column.Position)).ToArray());
+                column.Position,
+                column.Description)).ToArray());
 }

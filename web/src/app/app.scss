@@ -1,6 +1,91 @@
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--paper);
+}
+
+.topbar,
+.brand,
+.controls,
+.account {
+  display: flex;
+  align-items: center;
+}
+
+.topbar {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  padding: 0.7rem clamp(1rem, 3vw, 2.5rem);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.brand {
+  gap: 0.6rem;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.brand strong {
+  font-family: system-ui, sans-serif;
+  font-size: 1.25rem;
+  font-weight: 850;
+  letter-spacing: 0.015em;
+}
+
+.controls {
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  min-width: 0;
+}
+
+.account {
+  gap: 0.5rem;
+}
+
+button.icon-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  color: var(--ink);
+}
+
+.icon-button svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.65;
+}
+
+.icon-button:focus-visible,
+.brand:focus-visible {
+  outline: 2px solid var(--tui-border-focus);
+  outline-offset: 3px;
+}
+
+.account-name {
+  max-width: 15rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .connection-banner {
   padding: 0.75rem 1rem;
-  color: var(--tui-text-primary);
+  color: var(--brand-ink);
   background: var(--tui-status-warning);
   text-align: center;
+}
+
+@media (max-width: 40rem) {
+  .account-name {
+    display: none;
+  }
 }

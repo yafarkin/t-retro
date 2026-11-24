@@ -11,6 +11,58 @@
   gap: 0.75rem;
 }
 
+.column-title {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.column-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.columns:not(.column-cards) .column-details {
+  grid-column: 1 / -1;
+  order: 1;
+}
+
+.column-description {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+}
+
+.column-description:not(.field-invalid):focus-visible,
+.drag-grip:focus-visible {
+  outline: 2px solid var(--tui-border-focus);
+  outline-offset: -1px;
+}
+
+.drag-grip {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  flex: none;
+  min-height: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.5rem;
+  cursor: grab;
+  touch-action: none;
+}
+
 .color {
   width: 3.5rem;
   height: 2.75rem;
@@ -23,6 +75,56 @@
 .actions {
   display: flex;
   gap: 0.35rem;
+}
+
+.column-cards {
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(min(16rem, 90%), 1fr);
+  overflow-x: auto;
+  padding: 0.25rem 0.25rem 0.75rem;
+}
+
+.column-cards .column-row {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-top: 0.25rem solid var(--column-color);
+  border-radius: 0.75rem;
+  background: var(--paper);
+}
+
+.column-cards .color-field {
+  display: grid;
+  align-items: center;
+  padding-inline: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--surface);
+}
+
+.column-cards .color {
+  width: 2.5rem;
+  height: 2.5rem;
+  cursor: pointer;
+}
+
+.column-cards .cdk-drag-placeholder {
+  opacity: 0.35;
+}
+
+.column-cards .cdk-drag-preview {
+  box-sizing: border-box;
+  box-shadow: 0 0.5rem 1rem #0003;
+}
+
+.column-tools-end {
+  display: flex;
+  justify-content: end;
+}
+
+.column-cards .actions {
+  flex-wrap: wrap;
 }
 
 @media (max-width: 48rem) {

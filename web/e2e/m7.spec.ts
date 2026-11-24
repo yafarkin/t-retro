@@ -51,6 +51,7 @@ test('M7 timer countdown, expiration, sound coordination and reconnect work acro
   await login(first, origin, 'm7-first', 'Первый M7');
   await login(second, origin, 'm7-second', 'Второй M7');
   await first.goto(`${origin}/meetings/new`);
+  await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M7 таймер');
   await first.getByRole('button', { name: 'Создать встречу' }).click();
   await expect(first.getByRole('heading', { name: 'Ретро M7 таймер' })).toBeVisible();

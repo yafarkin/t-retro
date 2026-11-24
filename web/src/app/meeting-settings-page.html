@@ -423,7 +423,7 @@
             <h2>Колонки</h2>
             <div class="columns-preview">
               @for (column of meeting.columns; track column.id) {
-                <span [style.color]="column.color">{{ column.name }}</span>
+                <span class="column-label" [style.--column-color]="column.color">{{ column.name }}</span>
               }
             </div>
             <p>Настройки изменяет только фасилитатор.</p>
@@ -469,7 +469,10 @@
                 [attr.aria-label]="column.name"
                 (dragover)="meeting.phase === 'Group' ? allowDrop($event) : null"
                 (drop)="meeting.phase === 'Group' ? drop($event, 'column', column.id) : null">
-                <h3 [style.color]="column.color">{{ column.name }}</h3>
+                <h3 class="column-label" [style.--column-color]="column.color">{{ column.name }}</h3>
+                @if (column.description; as description) {
+                  <p class="hint card-text">{{ description }}</p>
+                }
                 @for (group of groupsForColumn(column.id); track group.id) {
                   <article
                     class="card-group"

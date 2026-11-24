@@ -1,7 +1,18 @@
+:host {
+  display: grid;
+  flex: 1;
+}
+
 .page {
-  width: min(100% - 2rem, 64rem);
-  margin: 0 auto;
-  padding: 2rem 0;
+  box-sizing: border-box;
+  width: min(100%, 80rem);
+  padding: clamp(1rem, 3vw, 2.5rem);
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  letter-spacing: -0.035em;
 }
 
 section,
@@ -10,6 +21,19 @@ article {
   padding: 1.25rem;
   border: 1px solid var(--tui-border-normal);
   border-radius: 0.75rem;
+}
+
+section {
+  background: var(--surface);
+}
+
+.catalog article {
+  margin: 0;
+}
+
+.name-field label {
+  display: block;
+  margin-bottom: 0.5rem;
 }
 
 form,

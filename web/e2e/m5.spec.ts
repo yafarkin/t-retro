@@ -29,6 +29,7 @@ test('M5 topics, live votes, late budget, open breakdown and exclusion work in i
   await login(second, origin, 'm5-second', 'Второй M5');
   await login(late, origin, 'm5-late', 'Поздний M5');
   await first.goto(`${origin}/meetings/new`);
+  await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M5 голосование');
   await first.getByLabel('Скрывать индивидуальные голоса').uncheck();
   await first.getByRole('button', { name: 'Создать встречу' }).click();

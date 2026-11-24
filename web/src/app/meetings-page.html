@@ -1,54 +1,43 @@
-<main class="page">
-  <header>
-    <div>
-      <p class="eyebrow">T-Retro</p>
-      <h1>Мои встречи</h1>
-    </div>
-    <div class="actions">
-      <a tuiButton routerLink="/templates">Шаблоны</a>
-      <a tuiButton routerLink="/meetings/new">Создать встречу</a>
-      <button tuiButton type="button" appearance="secondary" (click)="logout()">Выйти</button>
-    </div>
-  </header>
+<app-workspace-layout>
+  <main class="workspace">
+    <h1>Мои встречи</h1>
+    <a class="create-card" routerLink="/meetings/new" aria-labelledby="create-title">
+      <span class="create-mark" aria-hidden="true">+</span>
+      <span class="create-copy">
+        <strong id="create-title">Создать ретро</strong>
+        <span>Настройте доску и пригласите команду</span>
+      </span>
+      <span class="chevron" aria-hidden="true"></span>
+    </a>
 
-  @if (auth.user(); as employee) {
-    <p>Вы вошли как {{ employee.displayName }}.</p>
-  }
-  @if (error(); as message) {
-    <p class="error" role="alert">{{ message }}</p>
-  }
-  @if (loading()) {
-    <p>Загружаем встречи…</p>
-  }
+    <section class="recent" aria-labelledby="recent-title">
+      <h2 id="recent-title">Недавние встречи</h2>
 
-  <section>
-    <h2>Активные</h2>
-    @if (!loading() && active().length === 0) {
-      <p class="empty">Активных встреч нет. Создайте первую встречу.</p>
-    }
-    <div class="meetings">
-      @for (meeting of active(); track meeting.id) {
-        <a class="meeting" [routerLink]="['/meetings', meeting.id]">
-          <strong>{{ meeting.name }}</strong>
-          <span>{{ phaseName(meeting.phase) }}</span>
-          <time [dateTime]="meeting.createdAtUtc">{{ meeting.createdAtUtc | date: 'd MMMM y, HH:mm' }}</time>
-        </a>
-      }
-    </div>
-  </section>
-
-  @if (closed().length > 0) {
-    <section>
-      <h2>Завершённые</h2>
-      <div class="meetings">
-        @for (meeting of closed(); track meeting.id) {
-          <a class="meeting" [routerLink]="['/meetings', meeting.id]">
-            <strong>{{ meeting.name }}</strong>
-            <span>{{ phaseName(meeting.phase) }}</span>
-            <time [dateTime]="meeting.createdAtUtc">{{ meeting.createdAtUtc | date: 'd MMMM y, HH:mm' }}</time>
-          </a>
+      @if (loading()) {
+        <p class="list-message" role="status">Загружаем встречи…</p>
+      } @else if (error(); as message) {
+        <p class="list-message error" role="alert">{{ message }}</p>
+      } @else if (meetingGroups().length === 0) {
+        <p class="list-message">Здесь появятся ретро, которые вы создали или к которым присоединились.</p>
+      } @else {
+        @for (group of meetingGroups(); track group.title) {
+          <h3>{{ group.title }}</h3>
+          <ul class="meetings">
+            @for (meeting of group.meetings; track meeting.id) {
+              <li>
+                <a class="meeting" [routerLink]="['/meetings', meeting.id]">
+                  <strong>{{ meeting.name }}</strong>
+                  <span class="chevron" aria-hidden="true"></span>
+                  <time [dateTime]="meeting.createdAtUtc">{{ meeting.createdAtUtc | date: 'dd.MM.yyyy, HH:mm' }}</time>
+                  <span class="phase" [class.phase-closed]="meeting.phase === 'Closed'">
+                    {{ phaseName(meeting.phase) }}
+                  </span>
+                </a>
+              </li>
+            }
+          </ul>
         }
-      </div>
+      }
     </section>
-  }
-</main>
+  </main>
+</app-workspace-layout>

@@ -8,6 +8,7 @@ import { apiErrorMessage } from './api-error';
 import { MeetingForm } from './meeting-form';
 import {
   ActionItem,
+  copyEditableColumns,
   defaultColumns,
   defaultVoteSettings,
   DiscussionStatus,
@@ -126,7 +127,7 @@ export class MeetingSettingsPage {
       return;
     }
 
-    this.columns.set(template.columns.map((column) => ({ name: column.name, color: column.color })));
+    this.columns.set(copyEditableColumns(template.columns));
     this.selectedTemplate.set('');
     this.notice.set('Колонки шаблона применены к черновику. Сохраните настройки.');
   }
@@ -957,7 +958,7 @@ export class MeetingSettingsPage {
 
   private applyState(state: MeetingState): void {
     this.name.set(state.name);
-    this.columns.set(state.columns.map((column) => ({ name: column.name, color: column.color })));
+    this.columns.set(copyEditableColumns(state.columns));
     this.anonymousCards.set(state.anonymousCards);
     this.privateCollection.set(state.privateCollection);
     this.anonymousVotes.set(state.anonymousVotes);
