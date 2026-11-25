@@ -76,10 +76,6 @@
             <span><strong>Скрывать авторов карточек</strong><small>Имена авторов всех карточек останутся скрытыми после сбора.</small></span>
             <input type="checkbox" role="switch" aria-label="Скрывать авторов карточек" name="anonymousCards" [(ngModel)]="draftOptions().anonymousCards" />
           </label>
-          <label class="setting-row">
-            <span><strong>Скрывать индивидуальные голоса</strong><small>Участникам видны общие суммы голосов по темам.</small></span>
-            <input type="checkbox" role="switch" aria-label="Скрывать индивидуальные голоса" name="anonymousVotes" [(ngModel)]="draftOptions().anonymousVotes" />
-          </label>
         } @else {
           <label class="setting-row">
             <span><strong>Включить голосование</strong><small>Участники голосуют за темы после группировки.</small></span>

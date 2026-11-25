@@ -24,7 +24,6 @@ describe('MeetingService', () => {
       columns: defaultColumns(),
       anonymousCards: true,
       privateCollection: true,
-      anonymousVotes: true,
       voteSettings: defaultVoteSettings(),
     };
     service.create(payload).subscribe();
@@ -41,7 +40,6 @@ describe('MeetingService', () => {
       columns: defaultColumns(),
       anonymousCards: true,
       privateCollection: true,
-      anonymousVotes: true,
       voteSettings: defaultVoteSettings(),
     }).subscribe();
 
@@ -79,11 +77,12 @@ describe('MeetingService', () => {
   });
 
   it('creates an action with an assignee and operation id', () => {
-    service.createAction('meeting-id', 'topic-id', 'Задача', 'user-id', 7).subscribe();
+    service.createAction('meeting-id', 'topic-id', 'Задача', 'Описание', 'user-id', 7).subscribe();
 
     const request = http.expectOne('/api/meetings/meeting-id/topics/topic-id/actions');
     expect(request.request.method).toBe('POST');
     expect(request.request.body.text).toBe('Задача');
+    expect(request.request.body.description).toBe('Описание');
     expect(request.request.body.assigneeId).toBe('user-id');
     expect(request.request.body.expectedVersion).toBe(7);
     expect(request.request.body.operationId).toMatch(/[0-9a-f-]{36}/);

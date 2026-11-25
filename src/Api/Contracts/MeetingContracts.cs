@@ -44,7 +44,6 @@ public class MeetingSettingsRequest
 
     public bool PrivateCollection { get; set; } = true;
 
-    public bool AnonymousVotes { get; set; } = true;
 
     public VoteSettingsRequest VoteSettings { get; set; } = new();
 
@@ -104,15 +103,12 @@ public sealed record MeetingCardResponse(
 
 public sealed record MeetingGroupResponse(string Id, string ColumnId, string Name);
 
-public sealed record MeetingTopicVoterResponse(string UserId, string DisplayName, int Count);
-
 public sealed record MeetingTopicResponse(
     string Id,
     string Kind,
     string SourceId,
-    int TotalVotes,
-    int MyVotes,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<MeetingTopicVoterResponse>? Voters);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? TotalVotes,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? MyVotes);
 
 public sealed record MeetingVotingResponse(
     int OriginalCardCount,
@@ -150,15 +146,17 @@ public sealed class StopTimerRequest
 
 public sealed record DiscussionTopicResponse(string TopicId, int Position, string Status);
 
-public sealed record TopicCommentResponse(string Id, string TopicId, string Text);
+public sealed record TopicCommentResponse(string Id, string TopicId, string Text, int? CreatedVersion);
 
-public sealed record TopicDecisionResponse(string Id, string TopicId, string Text);
+public sealed record TopicDecisionResponse(string Id, string TopicId, string Text, int? CreatedVersion);
 
 public sealed record ActionItemResponse(
     string Id,
     string TopicId,
     string Text,
+    string? Description,
     string? AssigneeId,
+    int? CreatedVersion,
     string ExportStatus,
     string? ExternalRequestId,
     string? IssueKey,
@@ -173,6 +171,7 @@ public sealed record JiraExportResponse(
 
 public sealed record MeetingDiscussionResponse(
     string? CurrentTopicId,
+    int SelectionVersion,
     IReadOnlyList<DiscussionTopicResponse> Queue,
     IReadOnlyList<TopicCommentResponse> Comments,
     IReadOnlyList<TopicDecisionResponse> Decisions,
@@ -200,8 +199,8 @@ public sealed record MeetingStateResponse(
     string? FacilitatorId,
     bool AnonymousCards,
     bool PrivateCollection,
-    bool AnonymousVotes,
     bool VotingEnabled,
+    bool IsArchived,
     VoteSettingsResponse VoteSettings,
     IReadOnlyList<ColumnResponse> Columns,
     IReadOnlyList<ParticipantResponse> Participants,
@@ -214,6 +213,8 @@ public sealed record MeetingStateResponse(
     MeetingIntegrationsResponse Integrations,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingReadinessResponse? Readiness,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] MeetingTotalsResponse? Totals);
+
+public sealed record ArchiveMeetingRequest(int ExpectedVersion);
 
 public sealed class SelectCurrentTopicRequest
 {
@@ -257,6 +258,7 @@ public sealed class UpdateDecisionRequest
 public sealed class CreateActionRequest
 {
     public string? Text { get; set; }
+    public string? Description { get; set; }
     public Guid? AssigneeId { get; set; }
     public int ExpectedVersion { get; set; }
     public Guid OperationId { get; set; }
@@ -265,6 +267,7 @@ public sealed class CreateActionRequest
 public sealed class UpdateActionRequest
 {
     public string? Text { get; set; }
+    public string? Description { get; set; }
     public Guid? AssigneeId { get; set; }
     public int ExpectedVersion { get; set; }
 }

@@ -168,6 +168,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             .ToArray();
         IReadOnlyList<DiscussionTopic> discussionQueue = [];
         Guid? currentTopicId = null;
+        var discussionSelectionVersion = 0;
         IReadOnlyList<TopicComment> comments = [];
         IReadOnlyList<TopicDecision> decisions = [];
         IReadOnlyList<ActionItem> actions = [];
@@ -186,32 +187,36 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                     row.Position,
                     Enum.Parse<DiscussionStatus>(row.Status)))
                 .ToArray();
-            var currentTopic = await connection.ExecuteScalarAsync<string?>(
-                "SELECT current_topic_id FROM discussion_state WHERE meeting_id = @MeetingId;",
+            var selection = await connection.QuerySingleAsync<DiscussionSelectionRow>(
+                "SELECT current_topic_id AS TopicId, selection_version AS Version FROM discussion_state WHERE meeting_id = @MeetingId;",
                 new { MeetingId = meetingId.ToString() });
-            currentTopicId = currentTopic is null ? null : Guid.Parse(currentTopic);
+            currentTopicId = selection.TopicId is null ? null : Guid.Parse(selection.TopicId);
+            discussionSelectionVersion = selection.Version;
             comments = (await connection.QueryAsync<TextEntryRow>(
-                "SELECT id AS Id, meeting_id AS MeetingId, topic_id AS TopicId, text AS Text FROM comments WHERE meeting_id = @MeetingId ORDER BY id;",
+                "SELECT id AS Id, meeting_id AS MeetingId, topic_id AS TopicId, text AS Text, created_version AS CreatedVersion FROM comments WHERE meeting_id = @MeetingId ORDER BY id;",
                 new { MeetingId = meetingId.ToString() }))
                 .Select(row => new TopicComment(
                     Guid.Parse(row.Id),
                     Guid.Parse(row.MeetingId),
                     Guid.Parse(row.TopicId),
-                    row.Text))
+                    row.Text,
+                    row.CreatedVersion))
                 .ToArray();
             decisions = (await connection.QueryAsync<TextEntryRow>(
-                "SELECT id AS Id, meeting_id AS MeetingId, topic_id AS TopicId, text AS Text FROM decisions WHERE meeting_id = @MeetingId ORDER BY id;",
+                "SELECT id AS Id, meeting_id AS MeetingId, topic_id AS TopicId, text AS Text, created_version AS CreatedVersion FROM decisions WHERE meeting_id = @MeetingId ORDER BY id;",
                 new { MeetingId = meetingId.ToString() }))
                 .Select(row => new TopicDecision(
                     Guid.Parse(row.Id),
                     Guid.Parse(row.MeetingId),
                     Guid.Parse(row.TopicId),
-                    row.Text))
+                    row.Text,
+                    row.CreatedVersion))
                 .ToArray();
             actions = (await connection.QueryAsync<ActionRow>(
                 """
                 SELECT id AS Id, meeting_id AS MeetingId, topic_id AS TopicId,
-                       text AS Text, assignee_id AS AssigneeId
+                       text AS Text, description AS Description, assignee_id AS AssigneeId,
+                       created_version AS CreatedVersion
                 FROM actions WHERE meeting_id = @MeetingId ORDER BY id;
                 """,
                 new { MeetingId = meetingId.ToString() }))
@@ -220,7 +225,9 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                     Guid.Parse(row.MeetingId),
                     Guid.Parse(row.TopicId),
                     row.Text,
-                    row.AssigneeId is null ? null : Guid.Parse(row.AssigneeId)))
+                    row.AssigneeId is null ? null : Guid.Parse(row.AssigneeId),
+                    row.Description,
+                    row.CreatedVersion))
                 .ToArray();
             exports = (await connection.QueryAsync<ExportRow>(
                 """
@@ -255,7 +262,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             comments,
             decisions,
             actions,
-            exports);
+            exports,
+            DiscussionSelectionVersion: discussionSelectionVersion);
     }
 
     private static async Task<MeetingStateData> ReadClosedStateAsync(
@@ -292,6 +300,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         {
             Meeting = MapMeeting(meetingRow),
             ReadyUserIds = new HashSet<Guid>(),
+            Votes = [],
             Ballots = [],
             Exports = exports,
         };
@@ -318,6 +327,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
 
     public async Task<IReadOnlyList<MeetingSummary>> ListForUserAsync(
         Guid userId,
+        bool archived,
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
@@ -327,14 +337,38 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             FROM meetings m
             JOIN members member ON member.meeting_id = m.id AND member.status = 'Active'
             WHERE member.user_id = @UserId
-            ORDER BY m.created_at_utc DESC, m.id;
+              AND ((@Archived = 0 AND m.archived_at_utc IS NULL)
+                OR (@Archived = 1 AND m.facilitator_id = @UserId AND m.archived_at_utc IS NOT NULL))
+            ORDER BY COALESCE(m.archived_at_utc, m.created_at_utc) DESC, m.id;
             """,
-            new { UserId = userId.ToString() });
+            new { UserId = userId.ToString(), Archived = archived });
         return rows.Select(row => new MeetingSummary(
             Guid.Parse(row.Id),
             row.Name,
             Enum.Parse<MeetingPhase>(row.Phase),
             SqliteMapping.Time(row.CreatedAtUtc))).ToArray();
+    }
+
+    public async Task<int?> ArchiveAsync(
+        Guid meetingId,
+        Guid facilitatorId,
+        int expectedVersion,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        return await connection.QuerySingleOrDefaultAsync<int?>(new CommandDefinition(
+            """
+            UPDATE meetings
+            SET archived_at_utc = @Now, updated_at_utc = @Now, version = version + 1
+            WHERE id = @Id AND facilitator_id = @FacilitatorId
+              AND version = @ExpectedVersion AND archived_at_utc IS NULL
+              AND EXISTS (SELECT 1 FROM members
+                          WHERE meeting_id = @Id AND user_id = @FacilitatorId AND status = 'Active')
+            RETURNING version;
+            """,
+            new { Id = meetingId.ToString(), FacilitatorId = facilitatorId.ToString(), ExpectedVersion = expectedVersion, Now = nowUtc.ToString("O") },
+            cancellationToken: cancellationToken));
     }
 
     public async Task<int> UpdateDraftAsync(
@@ -364,7 +398,6 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 name = @Name,
                 anonymous_cards = @AnonymousCards,
                 private_collection = @PrivateCollection,
-                anonymous_votes = @AnonymousVotes,
                 voting_enabled = @VotingEnabled,
                 vote_mode = @VoteMode,
                 vote_percent = @VotePercent,
@@ -379,7 +412,6 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 meeting.Name,
                 AnonymousCards = meeting.AnonymousCards ? 1 : 0,
                 PrivateCollection = meeting.PrivateCollection ? 1 : 0,
-                AnonymousVotes = meeting.AnonymousVotes ? 1 : 0,
                 VotingEnabled = meeting.VotingEnabled ? 1 : 0,
                 VoteMode = meeting.VoteSettings.Mode.ToString(),
                 VotePercent = meeting.VoteSettings.Percent,
@@ -1451,7 +1483,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 vote_mode, vote_percent, vote_minimum, vote_fixed, voting_enabled, facilitator_id,
                 invitation_version, version, board_version, created_at_utc, updated_at_utc)
             VALUES (
-                @Id, @Name, @Phase, @AnonymousCards, @PrivateCollection, @AnonymousVotes,
+                @Id, @Name, @Phase, @AnonymousCards, @PrivateCollection, 1,
                 @VoteMode, @VotePercent, @VoteMinimum, @VoteFixed, @VotingEnabled, @FacilitatorId,
                 @InvitationVersion, @Version, @BoardVersion, @CreatedAtUtc, @UpdatedAtUtc);
             """,
@@ -1462,7 +1494,6 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 Phase = meeting.Phase.ToString(),
                 AnonymousCards = meeting.AnonymousCards ? 1 : 0,
                 PrivateCollection = meeting.PrivateCollection ? 1 : 0,
-                AnonymousVotes = meeting.AnonymousVotes ? 1 : 0,
                 VoteMode = meeting.VoteSettings.Mode.ToString(),
                 VotePercent = meeting.VoteSettings.Percent,
                 VoteMinimum = meeting.VoteSettings.Minimum,
@@ -1510,7 +1541,6 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             Enum.Parse<MeetingPhase>(row.Phase),
             row.AnonymousCards != 0,
             row.PrivateCollection != 0,
-            row.AnonymousVotes != 0,
             new VoteBudgetSettings(
                 Enum.Parse<VoteMode>(row.VoteMode),
                 row.VotePercent,
@@ -1523,7 +1553,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             row.BoardVersion,
             SqliteMapping.Time(row.CreatedAtUtc),
             SqliteMapping.Time(row.UpdatedAtUtc),
-            row.VotingEnabled != 0);
+            row.VotingEnabled != 0,
+            row.ArchivedAtUtc is null ? null : SqliteMapping.Time(row.ArchivedAtUtc));
 
     private sealed class ElectionRow
     {
@@ -1540,8 +1571,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         public required string Phase { get; init; }
         public int AnonymousCards { get; init; }
         public int PrivateCollection { get; init; }
-        public int AnonymousVotes { get; init; }
         public int VotingEnabled { get; init; }
+        public string? ArchivedAtUtc { get; init; }
         public required string VoteMode { get; init; }
         public int VotePercent { get; init; }
         public int VoteMinimum { get; init; }
@@ -1679,12 +1710,19 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         public required string Status { get; init; }
     }
 
+    private sealed class DiscussionSelectionRow
+    {
+        public string? TopicId { get; init; }
+        public int Version { get; init; }
+    }
+
     private sealed class TextEntryRow
     {
         public required string Id { get; init; }
         public required string MeetingId { get; init; }
         public required string TopicId { get; init; }
         public required string Text { get; init; }
+        public int? CreatedVersion { get; init; }
     }
 
     private sealed class ActionRow
@@ -1694,6 +1732,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         public required string TopicId { get; init; }
         public required string Text { get; init; }
         public string? AssigneeId { get; init; }
+        public string? Description { get; init; }
+        public int? CreatedVersion { get; init; }
     }
 
     private sealed class ExportRow

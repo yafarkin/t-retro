@@ -18,7 +18,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
         await using var transaction = connection.BeginTransaction(deferred: false);
         var state = await GetStateAsync(connection, transaction, meetingId, facilitatorId);
-        var accessError = CheckFacilitatorAccess(state, facilitatorId);
+        var accessError = CheckAccess(state, facilitatorId);
         if (accessError is not null)
         {
             return accessError;
@@ -30,10 +30,6 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             return phaseError;
         }
 
-        var current = await connection.ExecuteScalarAsync<string?>(
-            "SELECT current_topic_id FROM discussion_state WHERE meeting_id = @MeetingId;",
-            new { MeetingId = meetingId.ToString() },
-            transaction);
         var topicExists = await connection.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM discussion_topics WHERE meeting_id = @MeetingId AND topic_id = @TopicId;",
             new { MeetingId = meetingId.ToString(), TopicId = topicId.ToString() },
@@ -43,13 +39,8 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             return new MeetingCommandResult(MeetingCommandStatus.NotFound);
         }
 
-        if (current == topicId.ToString())
-        {
-            return new MeetingCommandResult(MeetingCommandStatus.Success, expectedVersion, topicId, true);
-        }
-
         await connection.ExecuteAsync(
-            "UPDATE discussion_state SET current_topic_id = @TopicId WHERE meeting_id = @MeetingId;",
+            "UPDATE discussion_state SET current_topic_id = @TopicId, selection_version = selection_version + 1 WHERE meeting_id = @MeetingId;",
             new { MeetingId = meetingId.ToString(), TopicId = topicId.ToString() },
             transaction);
         return await CompleteMutationAsync(
@@ -74,7 +65,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
         await using var transaction = connection.BeginTransaction(deferred: false);
         var state = await GetStateAsync(connection, transaction, meetingId, facilitatorId);
-        var accessError = CheckFacilitatorAccess(state, facilitatorId);
+        var accessError = CheckAccess(state, facilitatorId);
         if (accessError is not null)
         {
             return accessError;
@@ -128,7 +119,8 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
                 """
                 UPDATE discussion_state SET current_topic_id = (
                     SELECT topic_id FROM discussion_topics
-                    WHERE meeting_id = @MeetingId AND position = @NextPosition)
+                    WHERE meeting_id = @MeetingId AND position = @NextPosition),
+                    selection_version = selection_version + 1
                 WHERE meeting_id = @MeetingId;
                 """,
                 new { MeetingId = meetingId.ToString(), NextPosition = topic.Position + 1 },
@@ -146,7 +138,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
 
     public Task<MeetingCommandResult> CreateCommentAsync(
         TopicComment comment,
-        Guid facilitatorId,
+        Guid userId,
         int expectedVersion,
         Guid operationId,
         string fingerprint,
@@ -159,7 +151,8 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             comment.TopicId,
             comment.Text,
             null,
-            facilitatorId,
+            null,
+            userId,
             expectedVersion,
             operationId,
             fingerprint,
@@ -180,6 +173,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             commentId,
             facilitatorId,
             text,
+            null,
             null,
             expectedVersion,
             nowUtc,
@@ -216,6 +210,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             decision.TopicId,
             decision.Text,
             null,
+            null,
             facilitatorId,
             expectedVersion,
             operationId,
@@ -237,6 +232,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             decisionId,
             facilitatorId,
             text,
+            null,
             null,
             expectedVersion,
             nowUtc,
@@ -260,7 +256,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
 
     public Task<MeetingCommandResult> CreateActionAsync(
         ActionItem action,
-        Guid facilitatorId,
+        Guid userId,
         int expectedVersion,
         Guid operationId,
         string fingerprint,
@@ -272,8 +268,9 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             action.MeetingId,
             action.TopicId,
             action.Text,
+            action.Description,
             action.AssigneeId,
-            facilitatorId,
+            userId,
             expectedVersion,
             operationId,
             fingerprint,
@@ -285,6 +282,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         Guid actionId,
         Guid facilitatorId,
         string text,
+        string? description,
         Guid? assigneeId,
         int expectedVersion,
         DateTimeOffset nowUtc,
@@ -295,6 +293,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             actionId,
             facilitatorId,
             text,
+            description,
             assigneeId,
             expectedVersion,
             nowUtc,
@@ -322,8 +321,9 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         Guid meetingId,
         Guid topicId,
         string text,
+        string? description,
         Guid? assigneeId,
-        Guid facilitatorId,
+        Guid userId,
         int expectedVersion,
         Guid operationId,
         string fingerprint,
@@ -332,8 +332,8 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
         await using var transaction = connection.BeginTransaction(deferred: false);
-        var state = await GetStateAsync(connection, transaction, meetingId, facilitatorId);
-        var accessError = CheckFacilitatorAccess(state, facilitatorId);
+        var state = await GetStateAsync(connection, transaction, meetingId, userId);
+        var accessError = CheckAccess(state, userId, requireFacilitator: kind == EntryKind.Decision);
         if (accessError is not null)
         {
             return accessError;
@@ -344,7 +344,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             connection,
             transaction,
             meetingId,
-            facilitatorId,
+            userId,
             operationId,
             operationType,
             fingerprint);
@@ -378,13 +378,14 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         var sql = kind switch
         {
             EntryKind.Comment =>
-                "INSERT INTO comments (meeting_id, id, topic_id, text) VALUES (@MeetingId, @Id, @TopicId, @Text);",
+                "INSERT INTO comments (meeting_id, id, topic_id, text, created_version) VALUES (@MeetingId, @Id, @TopicId, @Text, @CreatedVersion);",
             EntryKind.Decision =>
-                "INSERT INTO decisions (meeting_id, id, topic_id, text) VALUES (@MeetingId, @Id, @TopicId, @Text);",
+                "INSERT INTO decisions (meeting_id, id, topic_id, text, created_version) VALUES (@MeetingId, @Id, @TopicId, @Text, @CreatedVersion);",
             EntryKind.Action =>
-                "INSERT INTO actions (meeting_id, id, topic_id, text, assignee_id) VALUES (@MeetingId, @Id, @TopicId, @Text, @AssigneeId);",
+                "INSERT INTO actions (meeting_id, id, topic_id, text, description, assignee_id, created_version) VALUES (@MeetingId, @Id, @TopicId, @Text, @Description, @AssigneeId, @CreatedVersion);",
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
+        var newVersion = expectedVersion + 1;
         await connection.ExecuteAsync(
             sql,
             new
@@ -393,10 +394,11 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
                 Id = entryId.ToString(),
                 TopicId = topicId.ToString(),
                 Text = text,
+                Description = description,
                 AssigneeId = assigneeId?.ToString(),
+                CreatedVersion = newVersion,
             },
             transaction);
-        var newVersion = expectedVersion + 1;
         var affected = await UpdateMeetingVersionAsync(
             connection,
             transaction,
@@ -413,7 +415,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             connection,
             transaction,
             meetingId,
-            facilitatorId,
+            userId,
             operationId,
             operationType,
             fingerprint,
@@ -430,6 +432,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         Guid entryId,
         Guid facilitatorId,
         string text,
+        string? description,
         Guid? assigneeId,
         int expectedVersion,
         DateTimeOffset nowUtc,
@@ -438,7 +441,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
         await using var transaction = connection.BeginTransaction(deferred: false);
         var state = await GetStateAsync(connection, transaction, meetingId, facilitatorId);
-        var accessError = CheckFacilitatorAccess(state, facilitatorId);
+        var accessError = CheckAccess(state, facilitatorId);
         if (accessError is not null)
         {
             return accessError;
@@ -471,7 +474,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             return new MeetingCommandResult(MeetingCommandStatus.InvalidAssignee);
         }
 
-        if (current.Text == text && (kind != EntryKind.Action || currentAssignee == assigneeId))
+        if (current.Text == text && current.Description == description && currentAssignee == assigneeId)
         {
             return new MeetingCommandResult(MeetingCommandStatus.Success, expectedVersion, entryId, true);
         }
@@ -480,7 +483,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         {
             EntryKind.Comment => "UPDATE comments SET text = @Text WHERE meeting_id = @MeetingId AND id = @Id;",
             EntryKind.Decision => "UPDATE decisions SET text = @Text WHERE meeting_id = @MeetingId AND id = @Id;",
-            EntryKind.Action => "UPDATE actions SET text = @Text, assignee_id = @AssigneeId WHERE meeting_id = @MeetingId AND id = @Id;",
+            EntryKind.Action => "UPDATE actions SET text = @Text, description = @Description, assignee_id = @AssigneeId WHERE meeting_id = @MeetingId AND id = @Id;",
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
         await connection.ExecuteAsync(
@@ -490,6 +493,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
                 MeetingId = meetingId.ToString(),
                 Id = entryId.ToString(),
                 Text = text,
+                Description = description,
                 AssigneeId = assigneeId?.ToString(),
             },
             transaction);
@@ -514,7 +518,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
         await using var transaction = connection.BeginTransaction(deferred: false);
         var state = await GetStateAsync(connection, transaction, meetingId, facilitatorId);
-        var accessError = CheckFacilitatorAccess(state, facilitatorId);
+        var accessError = CheckAccess(state, facilitatorId);
         if (accessError is not null)
         {
             return accessError;
@@ -560,9 +564,9 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         Guid entryId)
     {
         var table = TableName(kind);
-        var assignee = kind == EntryKind.Action ? "assignee_id" : "NULL";
+        var actionFields = kind == EntryKind.Action ? ", description AS Description, assignee_id AS AssigneeId" : "";
         return await connection.QuerySingleOrDefaultAsync<EntryRow>(
-            $"SELECT text AS Text, {assignee} AS AssigneeId FROM {table} WHERE meeting_id = @MeetingId AND id = @Id;",
+            $"SELECT text AS Text{actionFields} FROM {table} WHERE meeting_id = @MeetingId AND id = @Id;",
             new { MeetingId = meetingId.ToString(), Id = entryId.ToString() },
             transaction);
     }
@@ -653,7 +657,8 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             new { MeetingId = meetingId.ToString(), UserId = userId.ToString() },
             transaction);
 
-    private static MeetingCommandResult? CheckFacilitatorAccess(DiscussionStateRow? state, Guid facilitatorId)
+    private static MeetingCommandResult? CheckAccess(
+        DiscussionStateRow? state, Guid userId, bool requireFacilitator = true)
     {
         if (state is null || state.MemberStatus is null)
         {
@@ -661,7 +666,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         }
 
         if (state.MemberStatus == MemberStatus.Excluded.ToString()
-            || state.FacilitatorId != facilitatorId.ToString())
+            || (requireFacilitator && state.FacilitatorId != userId.ToString()))
         {
             return new MeetingCommandResult(MeetingCommandStatus.Forbidden);
         }
@@ -790,6 +795,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
     private sealed class EntryRow
     {
         public required string Text { get; init; }
+        public string? Description { get; init; }
         public string? AssigneeId { get; init; }
     }
 

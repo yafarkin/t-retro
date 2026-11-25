@@ -6,7 +6,8 @@ public sealed record JiraIssueExportRequest(
     Guid ExternalRequestId,
     string Text,
     string TopicTitle,
-    string? AssigneeSubject);
+    string? AssigneeSubject,
+    string? Description = null);
 
 public enum JiraExportResultStatus
 {

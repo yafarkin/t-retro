@@ -45,7 +45,7 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
 
         var action = await connection.QuerySingleOrDefaultAsync<ExportActionRow>(
             """
-            SELECT a.text AS ActionText,
+            SELECT a.text AS ActionText, a.description AS Description,
                    COALESCE(g.name, c.text) AS TopicTitle,
                    assignee.subject AS AssigneeSubject
             FROM actions a
@@ -115,7 +115,8 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
                 externalRequestId,
                 action.ActionText,
                 action.TopicTitle,
-                action.AssigneeSubject),
+                action.AssigneeSubject,
+                action.Description),
             true,
             newVersion);
     }
@@ -238,6 +239,7 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
     private sealed class ExportActionRow
     {
         public required string ActionText { get; init; }
+        public string? Description { get; init; }
         public required string TopicTitle { get; init; }
         public string? AssigneeSubject { get; init; }
     }

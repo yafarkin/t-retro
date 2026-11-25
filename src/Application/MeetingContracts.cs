@@ -4,7 +4,7 @@ namespace Application;
 
 public sealed record ColumnInput(string? Name, string? Color, string? Description = null);
 
-public sealed record PrivacyInput(bool AnonymousCards, bool PrivateCollection, bool AnonymousVotes);
+public sealed record PrivacyInput(bool AnonymousCards, bool PrivateCollection);
 
 public sealed record MeetingParticipant(
     Guid UserId,
@@ -31,7 +31,8 @@ public sealed record MeetingStateData(
     IReadOnlyList<ActionItem> Actions,
     IReadOnlyList<JiraExport> Exports,
     MeetingCompletionTotals? Completion = null,
-    IReadOnlyList<MeetingTopicTotal>? TopicTotals = null);
+    IReadOnlyList<MeetingTopicTotal>? TopicTotals = null,
+    int DiscussionSelectionVersion = 0);
 
 public sealed record MeetingIntegrations(bool Ai, bool Jira);
 

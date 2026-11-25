@@ -45,6 +45,7 @@ export class MeetingSyncService implements OnDestroy {
     this.connection = connection;
 
     connection.on('StateChanged', (id: string) => this.scheduleRefresh(id));
+    connection.on('BallotChanged', (id: string) => this.scheduleRefresh(id));
     connection.on('PresenceChanged', (id: string) => this.scheduleRefresh(id));
     connection.on('AccessRevoked', (id: string) => {
       if (id === this.meetingId) {

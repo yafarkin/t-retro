@@ -71,7 +71,6 @@ public sealed class MeetingCardVisibilityTests
             phase,
             anonymousCards,
             privateCollection,
-            true,
             VoteBudgetSettings.Default,
             null,
             null,

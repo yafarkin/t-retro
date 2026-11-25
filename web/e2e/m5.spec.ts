@@ -17,7 +17,7 @@ async function addCard(page: Page, text: string): Promise<void> {
   await expect(column.getByText(text, { exact: true })).toBeVisible();
 }
 
-test('M5 topics, live votes, late budget, open breakdown and exclusion work in independent contexts', async ({ browser, baseURL }) => {
+test('M5 topics, private ballots, late budget and anonymous results work in independent contexts', async ({ browser, baseURL }) => {
   const origin = baseURL!;
   const firstContext = await browser.newContext();
   const secondContext = await browser.newContext();
@@ -33,7 +33,6 @@ test('M5 topics, live votes, late budget, open breakdown and exclusion work in i
   await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M5 голосование');
   await first.getByRole('button', { name: 'Настройки ретро' }).click();
-  await first.getByLabel('Скрывать индивидуальные голоса').uncheck();
   await first.getByRole('button', { name: 'Голосование', exact: true }).click();
   await first.getByLabel('Распределение голосов').selectOption('percent');
   await first.getByRole('button', { name: 'Сохранить настройки' }).click();
@@ -67,17 +66,23 @@ test('M5 topics, live votes, late budget, open breakdown and exclusion work in i
 
   const firstGroupTopic = voteControls(first, 'Первая M5');
   await firstGroupTopic.getByRole('button', { name: 'Проголосовать: Первая M5' }).click();
-  await expect(firstGroupTopic.getByLabel('Ваши голоса')).toHaveText('Мои 1');
+  await expect(firstGroupTopic.getByLabel('Ваши голоса')).toHaveText('1');
   const secondGroupTopic = voteControls(second, 'Первая M5');
-  await expect(secondGroupTopic.getByLabel('Всего голосов')).toHaveText('1');
-  await secondGroupTopic.getByRole('button', { name: 'Расклад голосов' }).click();
-  await expect(secondGroupTopic.getByRole('list', { name: 'Расклад голосов' })).toContainText(/Первый M5\s*1/);
+  await expect(secondGroupTopic.getByLabel('Ваши голоса')).toHaveText('0');
+  await expect(firstGroupTopic.locator('.vote-actions')).toHaveText(/−\s*1\s*\+/);
+  await expect(secondGroupTopic.getByLabel('Всего голосов')).toHaveCount(0);
+  await expect(secondGroupTopic.getByRole('button', { name: 'Расклад голосов' })).toHaveCount(0);
+  const secondTab = await secondContext.newPage();
+  await secondTab.goto(second.url());
+  const secondTabGroupTopic = voteControls(secondTab, 'Первая M5');
+  await expect(secondTabGroupTopic.getByLabel('Ваши голоса')).toHaveText('0');
   await secondGroupTopic.getByRole('button', { name: 'Проголосовать: Первая M5' }).click();
-  await expect(secondGroupTopic.getByLabel('Ваши голоса')).toHaveText('Мои 1');
+  await expect(secondGroupTopic.getByLabel('Ваши голоса')).toHaveText('1');
   await secondGroupTopic.getByRole('button', { name: 'Проголосовать: Первая M5' }).click();
-  await expect(secondGroupTopic.getByLabel('Ваши голоса')).toHaveText('Мои 2');
+  await expect(secondGroupTopic.getByLabel('Ваши голоса')).toHaveText('2');
   await expect(second.getByRole('status', { name: 'Мои оставшиеся голоса' })).toHaveText('0');
-  await expect(secondGroupTopic.getByLabel('Всего голосов')).toHaveText('3');
+  await expect(secondTabGroupTopic.getByLabel('Ваши голоса')).toHaveText('2', { timeout: 5_000 });
+  await expect(firstGroupTopic.getByLabel('Ваши голоса')).toHaveText('1');
   await expect(secondGroupTopic.getByRole('button', { name: 'Проголосовать: Первая M5' })).toBeDisabled();
 
   await late.goto(invite);
@@ -85,22 +90,34 @@ test('M5 topics, live votes, late budget, open breakdown and exclusion work in i
   await expect(late.getByRole('status', { name: 'Мои оставшиеся голоса' })).toHaveText('2');
   const lateSingleTopic = voteControls(late, 'Третья M5');
   await lateSingleTopic.getByRole('button', { name: 'Проголосовать: Третья M5' }).click();
-  await expect(lateSingleTopic.getByLabel('Ваши голоса')).toHaveText('Мои 1');
+  await expect(lateSingleTopic.getByLabel('Ваши голоса')).toHaveText('1');
   const firstSingleTopic = voteControls(first, 'Третья M5');
-  await expect(firstSingleTopic.getByLabel('Всего голосов')).toHaveText('1');
+  await expect(firstSingleTopic.getByLabel('Ваши голоса')).toHaveText('0');
 
   await firstGroupTopic.getByRole('button', { name: 'Отозвать голос: Первая M5' }).click();
-  await expect(firstGroupTopic.getByLabel('Ваши голоса')).toHaveText('Мои 0');
-  await expect(secondGroupTopic.getByLabel('Всего голосов')).toHaveText('2');
+  await expect(firstGroupTopic.getByLabel('Ваши голоса')).toHaveText('0');
+  await expect(secondGroupTopic.getByLabel('Ваши голоса')).toHaveText('2');
+  const originalViewport = first.viewportSize()!;
+  await first.setViewportSize({ width: 390, height: 844 });
   await first.getByRole('button', { name: 'Настройки голосования' }).click();
   const budget = first.getByRole('dialog', { name: 'Настройки голосования' });
-  await expect(budget.getByLabel('Голосов на человека')).toHaveValue('2');
+  const budgetInput = budget.getByLabel('Голосов на человека');
+  const cancelButton = budget.getByRole('button', { name: 'Отмена' });
+  const saveButton = budget.getByRole('button', { name: 'Сохранить', exact: true });
+  await expect(budgetInput).toHaveValue('2');
+  const inputBox = (await budgetInput.boundingBox())!;
+  const cancelBox = (await cancelButton.boundingBox())!;
+  const saveBox = (await saveButton.boundingBox())!;
+  expect(inputBox.x).toBeCloseTo(cancelBox.x, 0);
+  expect(inputBox.x + inputBox.width).toBeCloseTo(saveBox.x + saveBox.width, 0);
+  expect(cancelBox.width).toBeCloseTo(saveBox.width, 0);
   await budget.getByLabel('Голосов на человека').fill('1');
-  await budget.getByRole('button', { name: 'Сохранить бюджет' }).click();
+  await saveButton.click();
   await expect(budget.getByRole('alert')).toBeVisible();
   await budget.getByLabel('Голосов на человека').fill('3');
-  await budget.getByRole('button', { name: 'Сохранить бюджет' }).click();
+  await saveButton.click();
   await expect(budget).not.toBeVisible();
+  await first.setViewportSize(originalViewport);
   await expect(first.getByRole('button', { name: 'Настройки голосования' })).toHaveText('3');
   await expect(second.getByRole('status', { name: 'Мои оставшиеся голоса' })).toHaveText('1');
   await expect(late.getByRole('status', { name: 'Мои оставшиеся голоса' })).toHaveText('2');
@@ -111,9 +128,11 @@ test('M5 topics, live votes, late budget, open breakdown and exclusion work in i
   await first.getByRole('button', { name: 'Исключить', exact: true }).click();
   await expect(second.getByRole('heading', { name: 'Доступ к встрече закрыт' })).toBeVisible();
   await first.getByRole('button', { name: 'Закрыть список участников' }).click();
-  await expect(firstGroupTopic.getByLabel('Всего голосов')).toHaveText('2');
-  await firstGroupTopic.getByRole('button', { name: 'Расклад голосов' }).click();
-  await expect(firstGroupTopic.getByRole('list', { name: 'Расклад голосов' })).toContainText(/Второй M5\s*2/);
+  await expect(firstGroupTopic.getByLabel('Ваши голоса')).toHaveText('0');
+  await advanceBeforeEveryoneIsReady(first, 'Перейти к обсуждению');
+  const groupResult = first.locator('.discussion-topic-button').filter({ hasText: 'Первая M5' });
+  await expect(groupResult).toContainText('Всего голосов: 2');
+  await expect(first.getByLabel('Расклад голосов')).toHaveCount(0);
 
   await Promise.all([firstContext, secondContext, lateContext].map(closeContextGracefully));
 });

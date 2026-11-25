@@ -129,17 +129,13 @@ public sealed class SqliteMeetingCompletionRepository(
             cardPrivacy,
             transaction);
 
-        if (current.Meeting.AnonymousVotes)
-        {
-            await connection.ExecuteAsync(
-                "DELETE FROM votes WHERE meeting_id = @MeetingId;",
-                new { MeetingId = meetingId.ToString() },
-                transaction);
-            await connection.ExecuteAsync(
-                "DELETE FROM personal_ballots WHERE meeting_id = @MeetingId;",
-                new { MeetingId = meetingId.ToString() },
-                transaction);
-        }
+        await connection.ExecuteAsync(
+            """
+            DELETE FROM votes WHERE meeting_id = @MeetingId;
+            DELETE FROM personal_ballots WHERE meeting_id = @MeetingId;
+            """,
+            new { MeetingId = meetingId.ToString() },
+            transaction);
 
         await connection.ExecuteAsync(
             "DELETE FROM readiness WHERE meeting_id = @MeetingId;",

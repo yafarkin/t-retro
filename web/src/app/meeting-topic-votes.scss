@@ -6,7 +6,7 @@
 .vote-actions {
   display: flex;
   justify-content: flex-end;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.25rem;
   font-variant-numeric: tabular-nums;
 }
@@ -19,67 +19,9 @@
   font-size: 1.05rem;
 }
 
-.my-votes,
-.total-votes {
-  display: flex;
-  align-items: center;
-  min-height: 2rem;
-  padding-inline: 0.35rem;
-  white-space: nowrap;
-}
-
 .my-votes {
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.total-votes {
+  min-width: 2ch;
+  padding-inline: 0.25rem;
+  text-align: center;
   font-weight: 700;
-}
-
-.vote-actions .breakdown-trigger {
-  justify-content: center;
-  width: auto;
-  min-width: 2rem;
-  padding-inline: 0.35rem;
-  border: 0;
-  border-radius: 0.4rem;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  text-decoration: underline dotted;
-  text-underline-offset: 0.2em;
-}
-
-.breakdown-trigger:hover {
-  background: var(--paper);
-}
-
-.breakdown-trigger:focus-visible {
-  outline: 2px solid var(--tui-border-focus);
-  border-radius: 0.25rem;
-}
-
-.vote-breakdown:not([hidden]) {
-  display: grid;
-  gap: 0.25rem;
-  width: max-content;
-  max-width: 100%;
-  box-sizing: border-box;
-  margin: 0.25rem 0 0 auto;
-  padding: 0.45rem;
-  border: 1px solid var(--line);
-  border-radius: 0.45rem;
-  background: var(--paper);
-  list-style: none;
-  font-size: 0.75rem;
-}
-
-.vote-breakdown li {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.65rem;
-  overflow-wrap: anywhere;
 }

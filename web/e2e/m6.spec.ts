@@ -21,9 +21,9 @@ async function voteTwice(page: Page, topicTitle: string): Promise<void> {
   const topic = voteControls(page, topicTitle);
   const button = topic.getByRole('button', { name: `Проголосовать: ${topicTitle}` });
   await button.click();
-  await expect(topic.getByLabel('Ваши голоса')).toHaveText('Мои 1');
+  await expect(topic.getByLabel('Ваши голоса')).toHaveText('1');
   await button.click();
-  await expect(topic.getByLabel('Ваши голоса')).toHaveText('Мои 2');
+  await expect(topic.getByLabel('Ваши голоса')).toHaveText('2');
 }
 
 test('M6 ranked queue, shared navigation, decisions, comments and actions work in two contexts', async ({ browser, baseURL }) => {
@@ -56,68 +56,91 @@ test('M6 ranked queue, shared navigation, decisions, comments and actions work i
   await voteTwice(first, 'Тема B');
   await advanceBeforeEveryoneIsReady(first, 'Перейти к обсуждению');
 
-  await expect(second.getByRole('heading', { name: 'Рейтинг тем' })).toBeVisible();
-  const secondQueue = second.locator('.discussion-queue-item');
+  const agenda = second.getByRole('navigation', { name: 'Темы по голосам' });
+  const secondQueue = agenda.getByRole('button');
+  const firstWorkspace = first.locator('.discussion-workspace');
+  const secondWorkspace = second.locator('.discussion-workspace');
   await expect(secondQueue).toHaveCount(3);
+  await expect(second.locator('.board')).toHaveCount(0);
   await expect(secondQueue.nth(0)).toContainText('Тема A');
   await expect(secondQueue.nth(0)).toContainText('Всего голосов: 2');
   await expect(secondQueue.nth(1)).toContainText('Тема B');
   await expect(secondQueue.nth(1)).toContainText('Всего голосов: 2');
   await expect(secondQueue.nth(2)).toContainText('Тема C');
   await expect(secondQueue.nth(2)).toContainText('Всего голосов: 0');
-  await expect(second.getByRole('heading', { name: 'Текущая тема: Тема A' })).toBeVisible();
+  await expect(secondWorkspace.getByRole('heading', { name: 'Тема A', exact: true })).toBeVisible();
+  const agendaBox = (await agenda.boundingBox())!;
+  const workspaceBox = (await secondWorkspace.boundingBox())!;
+  expect(agendaBox.x + agendaBox.width).toBeLessThan(workspaceBox.x);
 
-  await first.getByRole('button', { name: 'Пропустить и далее' }).click();
-  await expect(second.getByRole('heading', { name: 'Текущая тема: Тема B' })).toBeVisible();
-  await expect(secondQueue.nth(0)).toContainText('Пропущена');
-  await expect(second.locator('.current-topic-cards .card')).toHaveCount(1);
-  await expect(second.locator('.current-topic-cards')).toContainText('Тема B');
-  await expect(second.getByRole('button', { name: 'Добавить решение' })).toHaveCount(0);
-  await expect(second.getByRole('button', { name: 'Добавить комментарий' })).toHaveCount(0);
-  await expect(second.getByRole('button', { name: 'Добавить задачу' })).toHaveCount(0);
+  await first.getByRole('button', { name: 'Далее', exact: true }).click();
+  await expect(secondWorkspace.getByRole('heading', { name: 'Тема B', exact: true })).toBeVisible();
+  await expect(secondQueue.nth(0)).toHaveClass(/discussed-topic/);
+  await expect(secondQueue.nth(0)).toContainText('Обсуждена');
+  await expect(second.getByRole('button', { name: 'Решение', exact: true })).toHaveCount(0);
+  await expect(second.getByRole('button', { name: 'Далее', exact: true })).toHaveCount(0);
 
-  await first.getByLabel('Новое решение').fill('Первоначальное решение');
+  await secondQueue.nth(2).click();
+  await expect(secondWorkspace.getByRole('heading', { name: 'Тема C', exact: true })).toBeVisible();
+  await expect(firstWorkspace.getByRole('heading', { name: 'Тема B', exact: true })).toBeVisible();
+  await second.getByLabel('Новый комментарий').fill('Черновик для темы C');
+  await first.getByRole('button', { name: 'Выбрать тему: Тема B' }).click();
+  await expect(secondWorkspace.getByRole('heading', { name: 'Тема B', exact: true })).toBeVisible();
+  await expect(second.getByLabel('Новый комментарий')).toHaveValue('');
+
+  await second.getByLabel('Новый комментарий').fill('Комментарий участника');
+  await second.getByRole('button', { name: 'Добавить комментарий' }).click();
+  await expect(firstWorkspace.getByText('Комментарий участника', { exact: true })).toBeVisible();
+
+  const taskMode = second.getByRole('button', { name: 'Задача', exact: true });
+  await taskMode.click();
+  await expect(taskMode).toHaveAttribute('aria-pressed', 'true');
+  await second.getByLabel('Краткое название').fill('Задача с исполнителем');
+  await second.getByLabel('Описание').fill('Подробности задачи');
+  await second.getByLabel('Исполнитель').selectOption({ label: 'Второй M6' });
+  await second.getByRole('button', { name: 'Добавить задачу' }).click();
+  await expect(firstWorkspace.getByText('Подробности задачи', { exact: true })).toBeVisible();
+  await expect(firstWorkspace.getByText('Исполнитель: Второй M6', { exact: true })).toBeVisible();
+  const entries = firstWorkspace.locator('.discussion-feed > li');
+  await expect(entries.nth(0)).toContainText('Комментарий участника');
+  await expect(entries.nth(1)).toContainText('Задача с исполнителем');
+
+  const assignedAction = entries.nth(1);
+  await assignedAction.getByRole('button', { name: 'Изменить: Задача с исполнителем' }).click();
+  await assignedAction.getByLabel('Краткое название').fill('Обновлённая задача');
+  await assignedAction.getByLabel('Описание').fill('Обновлённое описание');
+  await assignedAction.getByRole('button', { name: 'Сохранить задачу' }).click();
+  await expect(secondWorkspace.getByText('Обновлённая задача', { exact: true })).toBeVisible();
+  await expect(secondWorkspace.getByText('Обновлённое описание', { exact: true })).toBeVisible();
+
+  await first.getByRole('button', { name: 'Решение', exact: true }).click();
+  await first.getByLabel('Новое решение').fill('Решение по теме B');
   await first.getByRole('button', { name: 'Добавить решение' }).click();
-  await expect(second.getByText('Первоначальное решение', { exact: true })).toBeVisible();
-  await first.getByRole('button', { name: 'Изменить решение' }).click();
-  await first.getByLabel('Текст решения').fill('Решение по теме B');
-  await first.getByRole('button', { name: 'Сохранить решение' }).click();
-  await expect(second.getByText('Решение по теме B', { exact: true })).toBeVisible();
-  await expect(second.getByText('Первоначальное решение', { exact: true })).toHaveCount(0);
+  await expect(secondWorkspace.getByText('Решение по теме B', { exact: true })).toBeVisible();
+  await expect(entries.nth(2)).toContainText('Решение по теме B');
 
-  await first.getByLabel('Новый комментарий').fill('Комментарий по теме B');
-  await first.getByRole('button', { name: 'Добавить комментарий' }).click();
-  await expect(second.getByText('Комментарий по теме B', { exact: true })).toBeVisible();
-  await first.getByRole('button', { name: 'Изменить комментарий' }).click();
-  await first.getByLabel('Текст комментария').fill('Обновлённый комментарий');
-  await first.getByRole('button', { name: 'Сохранить комментарий' }).click();
-  await expect(second.getByText('Обновлённый комментарий', { exact: true })).toBeVisible();
+  await first.getByRole('button', { name: 'Далее', exact: true }).click();
+  await expect(secondWorkspace.getByRole('heading', { name: 'Тема C', exact: true })).toBeVisible();
+  await expect(second.getByLabel('Новый комментарий')).toHaveValue('Черновик для темы C');
+  await expect(secondWorkspace.getByText('Комментарий участника', { exact: true })).toHaveCount(0);
+  await expect(first.getByRole('button', { name: 'Далее', exact: true })).toBeDisabled();
 
-  await first.getByLabel('Новая задача').fill('Задача без исполнителя');
-  await first.getByRole('button', { name: 'Добавить задачу' }).click();
-  await expect(second.getByText('Задача без исполнителя', { exact: true })).toBeVisible();
-  await expect(second.getByText('Исполнитель: Без исполнителя', { exact: true })).toBeVisible();
-  await first.getByLabel('Новая задача').fill('Задача с исполнителем');
-  await first.getByLabel('Исполнитель новой задачи').selectOption({ label: 'Второй M6' });
-  await first.getByRole('button', { name: 'Добавить задачу' }).click();
-  await expect(second.getByText('Задача с исполнителем', { exact: true })).toBeVisible();
-  await expect(second.getByText('Исполнитель: Второй M6', { exact: true })).toBeVisible();
-  await expect(second.getByText('Jira: не экспортировано', { exact: true })).toHaveCount(2);
+  await first.getByRole('button', { name: 'Выбрать тему: Тема A' }).click();
+  await expect(secondWorkspace.getByRole('heading', { name: 'Тема A', exact: true })).toBeVisible();
+  await expect(secondQueue.nth(0)).toHaveAttribute('aria-current', 'true');
+  await expect(secondQueue.nth(0)).toHaveClass(/discussed-topic/);
 
-  const assignedAction = first.locator('.discussion-entry').filter({ hasText: 'Задача с исполнителем' });
-  await assignedAction.getByRole('button', { name: 'Изменить задачу' }).click();
-  await first.getByLabel('Текст задачи').fill('Обновлённая задача с исполнителем');
-  await first.getByRole('button', { name: 'Сохранить задачу' }).click();
-  await expect(second.getByText('Обновлённая задача с исполнителем', { exact: true })).toBeVisible();
-  await expect(second.getByText('Исполнитель: Второй M6', { exact: true })).toBeVisible();
+  await first.getByRole('button', { name: 'Выбрать тему: Тема B' }).click();
+  await expect(secondWorkspace.getByText('Обновлённое описание', { exact: true })).toBeVisible();
+  await second.reload();
+  await expect(secondWorkspace.getByText('Комментарий участника', { exact: true })).toBeVisible();
+  await expect(secondWorkspace.getByText('Обновлённое описание', { exact: true })).toBeVisible();
 
-  await first.getByRole('button', { name: 'Обсуждена, далее' }).click();
-  await expect(second.getByRole('heading', { name: 'Текущая тема: Тема C' })).toBeVisible();
-  await expect(secondQueue.nth(1)).toContainText('Обсуждена');
-  await first.locator('.discussion-queue-item').nth(0).getByRole('button', { name: 'Выбрать тему: Тема A' }).click();
-  await expect(second.getByRole('heading', { name: 'Текущая тема: Тема A' })).toBeVisible();
-  await expect(first.getByRole('heading', { name: 'Текущая тема: Тема A' })).toBeVisible();
-  await expect(secondQueue.nth(0)).toContainText('Пропущена');
+  await second.setViewportSize({ width: 390, height: 844 });
+  const mobileAgenda = (await agenda.boundingBox())!;
+  const mobileWorkspace = (await secondWorkspace.boundingBox())!;
+  expect(mobileAgenda.y + mobileAgenda.height).toBeLessThan(mobileWorkspace.y);
+  expect(mobileWorkspace.x + mobileWorkspace.width).toBeLessThanOrEqual(390);
 
   await Promise.all([firstContext, secondContext].map(closeContextGracefully));
 });

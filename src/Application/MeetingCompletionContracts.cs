@@ -50,11 +50,10 @@ public static class MeetingCompletionFactory
         var cards = state.Cards.Select(card => state.Meeting.AnonymousCards || card.Card.Anonymous
             ? card with { AuthorId = null, AuthorDisplayName = null }
             : card).ToArray();
-        IReadOnlyList<VoteAllocation> votes = state.Meeting.AnonymousVotes ? [] : state.Votes;
         return state with
         {
             Cards = cards,
-            Votes = votes,
+            Votes = [],
             ReadyUserIds = new HashSet<Guid>(),
             Ballots = [],
             Completion = totals,

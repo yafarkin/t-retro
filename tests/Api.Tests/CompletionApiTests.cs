@@ -11,11 +11,9 @@ namespace Api.Tests;
 public sealed class CompletionApiTests
 {
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public async Task CompletionPersistsTotalsPdfAndIndependentPrivacy(bool anonymousCards, bool anonymousVotes)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CompletionPersistsTotalsPdfAndIndependentPrivacy(bool anonymousCards)
     {
         using var factory = new TRetroWebApplicationFactory();
         await ApiTestHelpers.MigrateAsync(factory);
@@ -27,7 +25,6 @@ public sealed class CompletionApiTests
             member,
             excluded,
             anonymousCards,
-            anonymousVotes,
             "Ретро с итогами");
         var missing = await facilitator.GetAsync($"/api/meetings/{setup.State.Id}/report.pdf");
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
@@ -55,16 +52,11 @@ public sealed class CompletionApiTests
         Assert.Contains(closed.Topics, topic => topic.TotalVotes == 0);
         Assert.All(closed.Cards, card => Assert.False(card.IsHidden));
         Assert.All(closed.Cards, card => Assert.Equal(anonymousCards || card.Text == "Карточка участника", card.AuthorId is null));
-        var voters = closed.Topics.Single(topic => topic.Id == setup.GroupTopicId).Voters;
-        Assert.Equal(anonymousVotes, voters is null);
-        if (!anonymousVotes)
-        {
-            Assert.Equal(3, voters!.Sum(vote => vote.Count));
-        }
+        Assert.All(closed.Topics, topic => Assert.Null(topic.MyVotes));
 
         Assert.Equal(anonymousCards ? 0 : 2, await CountAsync(factory.DatabasePath, "card_authors"));
-        Assert.Equal(anonymousVotes ? 0 : 3, await CountAsync(factory.DatabasePath, "votes"));
-        Assert.Equal(anonymousVotes ? 0 : 3, await CountAsync(factory.DatabasePath, "personal_ballots"));
+        Assert.Equal(0, await CountAsync(factory.DatabasePath, "votes"));
+        Assert.Equal(0, await CountAsync(factory.DatabasePath, "personal_ballots"));
         Assert.Equal(anonymousCards ? 0 : 2, await CountAsync(
             factory.DatabasePath,
             "command_deduplication",
@@ -77,7 +69,7 @@ public sealed class CompletionApiTests
         Assert.Equal(1, await CountAsync(factory.DatabasePath, "actions"));
         var payload = JsonSerializer.Deserialize<MeetingStateData>(await PayloadAsync(factory.DatabasePath))!;
         Assert.All(payload.Cards, card => Assert.Equal(anonymousCards || card.Card.Anonymous, card.AuthorId is null));
-        Assert.Equal(anonymousVotes ? 0 : 3, payload.Votes.Count);
+        Assert.Empty(payload.Votes);
         Assert.Empty(payload.Ballots);
         Assert.Empty(payload.ReadyUserIds);
 
@@ -103,10 +95,11 @@ public sealed class CompletionApiTests
             Assert.Contains("Решение по команде", text);
             Assert.Contains("Комментарий к теме", text);
             Assert.Contains("Задача после ретро", text);
+            Assert.Contains("Описание задачи для отчёта", text);
             Assert.Contains("обсуждена", text);
             Assert.Equal(anonymousCards, !text.Contains("Автор:"));
             Assert.DoesNotContain("Автор: Участник", text);
-            Assert.Equal(anonymousVotes, !text.Contains("Голос:"));
+            Assert.DoesNotContain("Голос:", text);
         }
 
         var replay = await CloseAsync(facilitator, setup.State.Id, request);
@@ -140,7 +133,7 @@ public sealed class CompletionApiTests
         using var facilitator = factory.CreateClient();
         using var member = factory.CreateClient();
         using var excluded = factory.CreateClient();
-        var setup = await CreateDiscussedMeetingAsync(facilitator, member, excluded, true, true, "Откат PDF");
+        var setup = await CreateDiscussedMeetingAsync(facilitator, member, excluded, true, "Откат PDF");
         var request = new AdvanceMeetingRequest
         {
             FromPhase = "Discuss",
@@ -210,7 +203,6 @@ public sealed class CompletionApiTests
             member,
             excluded,
             false,
-            false,
             "Длинное ретро",
             longText);
         (await CloseAsync(facilitator, setup.State.Id, new AdvanceMeetingRequest
@@ -233,7 +225,6 @@ public sealed class CompletionApiTests
         HttpClient member,
         HttpClient excluded,
         bool anonymousCards,
-        bool anonymousVotes,
         string name,
         string? facilitatorCardText = null)
     {
@@ -242,7 +233,6 @@ public sealed class CompletionApiTests
         await ApiTestHelpers.LoginAsync(excluded, "completion-excluded", "Исключённый");
         var settings = ApiTestHelpers.DefaultMeeting(name);
         settings.AnonymousCards = anonymousCards;
-        settings.AnonymousVotes = anonymousVotes;
         var createdResponse = await facilitator.PostAsJsonAsync("/api/meetings", settings);
         createdResponse.EnsureSuccessStatusCode();
         var created = (await createdResponse.Content.ReadFromJsonAsync<MeetingCreatedResponse>())!;
@@ -322,6 +312,7 @@ public sealed class CompletionApiTests
         (await facilitator.PostAsJsonAsync($"/api/meetings/{created.Id}/topics/{groupTopic.Id}/actions", new CreateActionRequest
         {
             Text = "Задача после ретро",
+            Description = "Описание задачи для отчёта",
             AssigneeId = Guid.Parse(memberUser.Id),
             ExpectedVersion = discussed.Version,
             OperationId = Guid.NewGuid(),

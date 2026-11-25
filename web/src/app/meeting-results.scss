@@ -1,0 +1,79 @@
+.results-actions,
+.topic-results,
+.topic-votes {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.results-actions svg,
+.topic-results svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+
+.results-board {
+  padding: 0;
+  border: 0;
+}
+
+.results-board .undiscussed-topic {
+  color: var(--muted);
+  background: var(--paper);
+}
+
+.results-board .card.undiscussed-topic,
+.results-board .undiscussed-topic .card {
+  border-inline-start-color: var(--line);
+  background: var(--paper);
+}
+
+.results-board .undiscussed-topic .card,
+.results-board .undiscussed-topic .group-heading h4 {
+  color: inherit;
+}
+
+.topic-results {
+  justify-content: flex-end;
+  margin-top: 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.topic-votes {
+  gap: 0.3rem;
+  color: var(--muted);
+}
+
+.meeting-dialog.results-panel {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(100%, 29rem);
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+}
+
+.results-panel h3,
+.closed-export li {
+  overflow-wrap: anywhere;
+}
+
+.closed-summary,
+.closed-export {
+  font-size: 0.875rem;
+}
+
+.closed-export summary {
+  cursor: pointer;
+}
+
+.closed-export li {
+  margin-block: 0.5rem;
+}
+
+.closed-export li button {
+  margin-inline-start: 0.5rem;
+}

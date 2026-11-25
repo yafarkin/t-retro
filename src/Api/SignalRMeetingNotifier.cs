@@ -12,6 +12,10 @@ public sealed class SignalRMeetingNotifier(
         hub.Clients.Group(RetroHub.MeetingGroup(meetingId))
             .SendAsync("StateChanged", meetingId, version, cancellationToken);
 
+    public Task BallotChangedAsync(Guid meetingId, Guid userId, CancellationToken cancellationToken) =>
+        hub.Clients.Group(RetroHub.UserGroup(userId))
+            .SendAsync("BallotChanged", meetingId, cancellationToken);
+
     public Task PresenceChangedAsync(Guid meetingId, CancellationToken cancellationToken) =>
         hub.Clients.Group(RetroHub.MeetingGroup(meetingId))
             .SendAsync("PresenceChanged", meetingId, cancellationToken);

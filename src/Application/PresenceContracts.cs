@@ -21,6 +21,8 @@ public interface IMeetingNotifier
 {
     Task StateChangedAsync(Guid meetingId, int version, CancellationToken cancellationToken);
 
+    Task BallotChangedAsync(Guid meetingId, Guid userId, CancellationToken cancellationToken);
+
     Task PresenceChangedAsync(Guid meetingId, CancellationToken cancellationToken);
 
     Task AccessRevokedAsync(Guid meetingId, Guid userId, CancellationToken cancellationToken);

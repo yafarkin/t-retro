@@ -52,7 +52,7 @@ public sealed class MeetingAccessService(
             : null;
         var showTopics = state.Meeting.Phase is MeetingPhase.Vote or MeetingPhase.Discuss or MeetingPhase.Closed;
         var topics = showTopics
-            ? state.Topics.Select(topic => ProjectTopic(state, participants, topic, userId)).ToArray()
+            ? state.Topics.Select(topic => ProjectTopic(state, topic, userId)).ToArray()
             : [];
         var voting = state.Meeting.Phase == MeetingPhase.Vote
             ? ProjectVoting(state, userId)
@@ -61,6 +61,7 @@ public sealed class MeetingAccessService(
             ? new MeetingDiscussion(
                 state.DiscussionQueue,
                 state.CurrentTopicId,
+                state.DiscussionSelectionVersion,
                 state.Comments,
                 state.Decisions,
                 state.Actions,
@@ -92,27 +93,18 @@ public sealed class MeetingAccessService(
 
     private static MeetingTopicResult ProjectTopic(
         MeetingStateData state,
-        IReadOnlyList<MeetingParticipant> participants,
         MeetingTopic topic,
         Guid viewerId)
     {
-        var votes = state.Votes.Where(vote => vote.TopicId == topic.Id).ToArray();
-        var voters = state.Meeting.AnonymousVotes
-            ? null
-            : votes.Select(vote =>
-            {
-                var participant = participants.Single(item => item.UserId == vote.UserId);
-                return new MeetingTopicVoter(vote.UserId, participant.DisplayName, vote.Count);
-            }).ToArray();
+        if (state.Meeting.Phase == MeetingPhase.Vote)
+        {
+            var myVotes = state.Votes.SingleOrDefault(vote => vote.TopicId == topic.Id && vote.UserId == viewerId);
+            return new MeetingTopicResult(topic.Id, topic.Kind, topic.SourceId, null, myVotes?.Count ?? 0);
+        }
+
         var totalVotes = state.TopicTotals?.SingleOrDefault(total => total.TopicId == topic.Id)?.TotalVotes
-            ?? votes.Sum(vote => vote.Count);
-        return new MeetingTopicResult(
-            topic.Id,
-            topic.Kind,
-            topic.SourceId,
-            totalVotes,
-            votes.Where(vote => vote.UserId == viewerId).Sum(vote => vote.Count),
-            voters);
+            ?? state.Votes.Where(vote => vote.TopicId == topic.Id).Sum(vote => vote.Count);
+        return new MeetingTopicResult(topic.Id, topic.Kind, topic.SourceId, totalVotes, null);
     }
 
     private static MeetingVoting ProjectVoting(MeetingStateData state, Guid viewerId)

@@ -45,7 +45,6 @@ public sealed class MeetingApiTests
                 Columns = update.Columns,
                 AnonymousCards = update.AnonymousCards,
                 PrivateCollection = update.PrivateCollection,
-                AnonymousVotes = update.AnonymousVotes,
                 VoteSettings = update.VoteSettings,
             });
 

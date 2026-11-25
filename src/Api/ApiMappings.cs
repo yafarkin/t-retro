@@ -18,8 +18,8 @@ public static class ApiMappings
             snapshot.Meeting.FacilitatorId?.ToString(),
             snapshot.Meeting.AnonymousCards,
             snapshot.Meeting.PrivateCollection,
-            snapshot.Meeting.AnonymousVotes,
             snapshot.Meeting.VotingEnabled,
+            snapshot.Meeting.ArchivedAtUtc is not null,
             new VoteSettingsResponse(
                 snapshot.Meeting.VoteSettings.Mode.ToString().ToLowerInvariant(),
                 snapshot.Meeting.VoteSettings.Percent,
@@ -58,11 +58,7 @@ public static class ApiMappings
                 topic.Kind.ToString().ToLowerInvariant(),
                 topic.SourceId.ToString(),
                 topic.TotalVotes,
-                topic.MyVotes,
-                topic.Voters?.Select(voter => new MeetingTopicVoterResponse(
-                    voter.UserId.ToString(),
-                    voter.DisplayName,
-                    voter.Count)).ToArray())).ToArray(),
+                topic.MyVotes)).ToArray(),
             snapshot.Voting is null
                 ? null
                 : new MeetingVotingResponse(
@@ -100,6 +96,7 @@ public static class ApiMappings
     private static MeetingDiscussionResponse ToResponse(MeetingDiscussion discussion) =>
         new(
             discussion.CurrentTopicId?.ToString(),
+            discussion.SelectionVersion,
             discussion.Queue.Select(topic => new DiscussionTopicResponse(
                 topic.TopicId.ToString(),
                 topic.Position,
@@ -107,11 +104,13 @@ public static class ApiMappings
             discussion.Comments.Select(comment => new TopicCommentResponse(
                 comment.Id.ToString(),
                 comment.TopicId.ToString(),
-                comment.Text)).ToArray(),
+                comment.Text,
+                comment.CreatedVersion)).ToArray(),
             discussion.Decisions.Select(decision => new TopicDecisionResponse(
                 decision.Id.ToString(),
                 decision.TopicId.ToString(),
-                decision.Text)).ToArray(),
+                decision.Text,
+                decision.CreatedVersion)).ToArray(),
             discussion.Actions.Select(action => ToResponse(action, discussion.Exports)).ToArray());
 
     private static ActionItemResponse ToResponse(ActionItem action, IReadOnlyList<JiraExport> exports)
@@ -121,7 +120,9 @@ public static class ApiMappings
             action.Id.ToString(),
             action.TopicId.ToString(),
             action.Text,
+            action.Description,
             action.AssigneeId?.ToString(),
+            action.CreatedVersion,
             export?.Status.ToString().ToLowerInvariant() ?? "notExported",
             export?.ExternalRequestId.ToString(),
             export?.IssueKey,

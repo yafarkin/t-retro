@@ -223,14 +223,25 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await column.getByLabel('Новая карточка').fill('Тема без голосования');
   await column.getByRole('button', { name: 'Добавить карточку' }).click();
   await expect(column.getByText('Тема без голосования', { exact: true })).toBeVisible();
+  await expect(first.getByRole('button', { name: 'Архивировать ретро' })).toHaveCount(0);
+  await second.getByRole('button', { name: 'Архивировать ретро' }).click();
+  await expect(second.getByText('В архиве', { exact: true })).toBeVisible();
+  await expect(first.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Сбор карточек');
+  await second.goto(origin);
+  await second.getByText('Архив ретро', { exact: true }).click();
+  await second.locator('details.archive').getByRole('link', { name: 'Ретро M1' }).click();
+  await expect(second.getByText('В архиве', { exact: true })).toBeVisible();
+  await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Сбор карточек');
+  await expect(column.getByText('Тема без голосования', { exact: true })).toBeVisible();
   await advanceBeforeEveryoneIsReady(second, 'Перейти к группировке');
   await advanceBeforeEveryoneIsReady(second, 'Перейти к обсуждению');
   for (const page of [first, second]) {
-    await expect(page.getByRole('heading', { name: 'Текущая тема: Тема без голосования' })).toBeVisible();
-    await expect(page.locator('.discussion-queue-item')).toContainText('Всего голосов: 0');
+    await expect(page.getByRole('heading', { name: 'Тема без голосования' })).toBeVisible();
+    await expect(page.locator('.discussion-topic-button')).toContainText('Всего голосов: 0');
   }
-  second.once('dialog', (dialog) => dialog.accept());
   await second.getByRole('button', { name: 'Завершить ретро' }).click();
+  await second.getByRole('dialog', { name: 'Завершить ретро?' })
+    .getByRole('button', { name: 'Завершить ретро', exact: true }).click();
   const report = first.getByRole('link', { name: 'Скачать PDF' });
   await expect(report).toBeVisible();
   const pdf = await firstContext.request.get(new URL((await report.getAttribute('href'))!, origin).href);

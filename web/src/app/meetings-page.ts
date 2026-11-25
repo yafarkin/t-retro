@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -9,7 +9,7 @@ import { WorkspaceLayout } from './workspace-layout';
 
 @Component({
   selector: 'app-meetings-page',
-  imports: [DatePipe, RouterLink, WorkspaceLayout],
+  imports: [DatePipe, NgTemplateOutlet, RouterLink, WorkspaceLayout],
   templateUrl: './meetings-page.html',
   styleUrl: './meetings-page.scss',
 })
@@ -18,6 +18,9 @@ export class MeetingsPage {
   readonly meetings = signal<MeetingSummary[]>([]);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
+  readonly archive = signal<MeetingSummary[]>([]);
+  readonly archiveLoading = signal(false);
+  readonly archiveError = signal<string | null>(null);
   readonly meetingGroups = computed(() => {
     const meetings = this.meetings();
     return [
@@ -35,6 +38,25 @@ export class MeetingsPage {
       error: (error: HttpErrorResponse) => {
         this.error.set(apiErrorMessage(error));
         this.loading.set(false);
+      },
+    });
+  }
+
+  loadArchive(expanded: boolean): void {
+    if (!expanded || this.archiveLoading()) {
+      return;
+    }
+
+    this.archiveLoading.set(true);
+    this.archiveError.set(null);
+    this.meetingsService.listArchived().subscribe({
+      next: (meetings) => {
+        this.archive.set(meetings);
+        this.archiveLoading.set(false);
+      },
+      error: (error: HttpErrorResponse) => {
+        this.archiveError.set(apiErrorMessage(error));
+        this.archiveLoading.set(false);
       },
     });
   }

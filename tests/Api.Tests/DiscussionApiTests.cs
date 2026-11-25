@@ -102,10 +102,10 @@ public sealed class DiscussionApiTests
         var initial = await StateAsync(facilitator, meeting.Id);
 
         var forbidden = await member.PostAsJsonAsync(
-            $"/api/meetings/{meeting.Id}/topics/{topicId}/comments",
-            new CreateCommentRequest
+            $"/api/meetings/{meeting.Id}/topics/{topicId}/decisions",
+            new CreateDecisionRequest
             {
-                Text = "Чужой комментарий",
+                Text = "Решение участника",
                 ExpectedVersion = initial.Version,
                 OperationId = Guid.NewGuid(),
             });
@@ -127,15 +127,15 @@ public sealed class DiscussionApiTests
             ExpectedVersion = initial.Version,
             OperationId = operationId,
         };
-        var createdComment = await facilitator.PostAsJsonAsync(
+        var createdComment = await member.PostAsJsonAsync(
             $"/api/meetings/{meeting.Id}/topics/{topicId}/comments", commentRequest);
         createdComment.EnsureSuccessStatusCode();
         var comment = (await createdComment.Content.ReadFromJsonAsync<DiscussionEntryCreatedResponse>())!;
-        var replay = await facilitator.PostAsJsonAsync(
+        var replay = await member.PostAsJsonAsync(
             $"/api/meetings/{meeting.Id}/topics/{topicId}/comments", commentRequest);
         replay.EnsureSuccessStatusCode();
         Assert.Equal(comment, await replay.Content.ReadFromJsonAsync<DiscussionEntryCreatedResponse>());
-        var conflicting = await facilitator.PostAsJsonAsync(
+        var conflicting = await member.PostAsJsonAsync(
             $"/api/meetings/{meeting.Id}/topics/{topicId}/comments",
             new CreateCommentRequest
             {
@@ -168,9 +168,14 @@ public sealed class DiscussionApiTests
             facilitator, meeting.Id, topicId, "Задача без исполнителя", null, afterUpdate.Version);
         var afterFirstAction = await StateAsync(facilitator, meeting.Id);
         var actionWithAssignee = await CreateActionAsync(
-            facilitator, meeting.Id, topicId, "Задача с исполнителем", memberUser.Id, afterFirstAction.Version);
+            member, meeting.Id, topicId, "Задача с исполнителем", memberUser.Id, afterFirstAction.Version, "  Детали задачи  ");
         var afterActions = await StateAsync(member, meeting.Id);
         Assert.Equal(2, afterActions.Discussion!.Actions.Count);
+        var assigned = afterActions.Discussion.Actions.Single(action => action.Id == actionWithAssignee.Id);
+        Assert.Equal("Детали задачи", assigned.Description);
+        Assert.Equal(actionWithAssignee.Version, assigned.CreatedVersion);
+        Assert.Equal(comment.Version, Assert.Single(afterActions.Discussion.Comments).CreatedVersion);
+        Assert.Null(afterActions.Discussion.Actions.Single(action => action.Id == actionWithoutAssignee.Id).Description);
         Assert.All(afterActions.Discussion.Actions, action => Assert.Equal("notExported", action.ExportStatus));
         var invalidAssignee = await CreateActionResponseAsync(
             facilitator, meeting.Id, topicId, "Неверный исполнитель", Guid.NewGuid().ToString(), afterActions.Version);
@@ -187,10 +192,26 @@ public sealed class DiscussionApiTests
             new UpdateActionRequest
             {
                 Text = "Изменено после исключения",
+                Description = "Обновлённые детали",
                 AssigneeId = Guid.Parse(memberUser.Id),
                 ExpectedVersion = afterExclusion.Version,
             })).EnsureSuccessStatusCode();
         var afterHistoricalEdit = await StateAsync(facilitator, meeting.Id);
+        var edited = afterHistoricalEdit.Discussion!.Actions.Single(action => action.Id == actionWithAssignee.Id);
+        Assert.Equal("Обновлённые детали", edited.Description);
+        Assert.Equal(assigned.CreatedVersion, edited.CreatedVersion);
+        var excludedComment = await member.PostAsJsonAsync(
+            $"/api/meetings/{meeting.Id}/topics/{topicId}/comments",
+            new CreateCommentRequest
+            {
+                Text = "Комментарий после исключения",
+                ExpectedVersion = afterHistoricalEdit.Version,
+                OperationId = Guid.NewGuid(),
+            });
+        Assert.Equal(HttpStatusCode.Forbidden, excludedComment.StatusCode);
+        var excludedTask = await CreateActionResponseAsync(
+            member, meeting.Id, topicId, "Задача после исключения", null, afterHistoricalEdit.Version);
+        Assert.Equal(HttpStatusCode.Forbidden, excludedTask.StatusCode);
         var newExcludedAssignment = await CreateActionResponseAsync(
             facilitator,
             meeting.Id,
@@ -308,9 +329,10 @@ public sealed class DiscussionApiTests
         string topicId,
         string text,
         string? assigneeId,
-        int expectedVersion)
+        int expectedVersion,
+        string? description = null)
     {
-        var response = await CreateActionResponseAsync(client, meetingId, topicId, text, assigneeId, expectedVersion);
+        var response = await CreateActionResponseAsync(client, meetingId, topicId, text, assigneeId, expectedVersion, description);
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<DiscussionEntryCreatedResponse>())!;
     }
@@ -321,12 +343,14 @@ public sealed class DiscussionApiTests
         string topicId,
         string text,
         string? assigneeId,
-        int expectedVersion) =>
+        int expectedVersion,
+        string? description = null) =>
         client.PostAsJsonAsync(
             $"/api/meetings/{meetingId}/topics/{topicId}/actions",
             new CreateActionRequest
             {
                 Text = text,
+                Description = description,
                 AssigneeId = assigneeId is null ? null : Guid.Parse(assigneeId),
                 ExpectedVersion = expectedVersion,
                 OperationId = Guid.NewGuid(),

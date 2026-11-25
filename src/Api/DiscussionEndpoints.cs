@@ -170,6 +170,7 @@ public static class DiscussionEndpoints
                 meetingId,
                 topicId,
                 request.Text,
+                request.Description,
                 request.AssigneeId,
                 request.ExpectedVersion,
                 request.OperationId,
@@ -192,6 +193,7 @@ public static class DiscussionEndpoints
                 meetingId,
                 actionId,
                 request.Text,
+                request.Description,
                 request.AssigneeId,
                 request.ExpectedVersion,
                 cancellationToken);

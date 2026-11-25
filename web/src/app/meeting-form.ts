@@ -15,7 +15,6 @@ export class MeetingForm {
   readonly columns = model.required<EditableColumn[]>();
   readonly anonymousCards = model.required<boolean>();
   readonly privateCollection = model.required<boolean>();
-  readonly anonymousVotes = model.required<boolean>();
   readonly votingEnabled = model.required<boolean>();
   readonly voteSettings = model.required<VoteSettings>();
   readonly busy = input(false);

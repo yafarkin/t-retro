@@ -22,22 +22,39 @@
       } @else {
         @for (group of meetingGroups(); track group.title) {
           <h3>{{ group.title }}</h3>
-          <ul class="meetings">
-            @for (meeting of group.meetings; track meeting.id) {
-              <li>
-                <a class="meeting" [routerLink]="['/meetings', meeting.id]">
-                  <strong>{{ meeting.name }}</strong>
-                  <span class="chevron" aria-hidden="true"></span>
-                  <time [dateTime]="meeting.createdAtUtc">{{ meeting.createdAtUtc | date: 'dd.MM.yyyy, HH:mm' }}</time>
-                  <span class="phase" [class.phase-closed]="meeting.phase === 'Closed'">
-                    {{ phaseName(meeting.phase) }}
-                  </span>
-                </a>
-              </li>
-            }
-          </ul>
+          <ng-container *ngTemplateOutlet="meetingList; context: { $implicit: group.meetings }" />
         }
       }
     </section>
+
+    <details #archiveSection class="archive" (toggle)="loadArchive(archiveSection.open)">
+      <summary>Архив ретро</summary>
+      @if (archiveLoading()) {
+        <p class="list-message" role="status">Загружаем архив…</p>
+      } @else if (archiveError(); as message) {
+        <p class="list-message error" role="alert">{{ message }}</p>
+      } @else if (archive().length) {
+        <ng-container *ngTemplateOutlet="meetingList; context: { $implicit: archive() }" />
+      } @else {
+        <p class="list-message">В архиве пока нет встреч.</p>
+      }
+    </details>
   </main>
 </app-workspace-layout>
+
+<ng-template #meetingList let-items>
+  <ul class="meetings">
+    @for (meeting of items; track meeting.id) {
+      <li>
+        <a class="meeting" [routerLink]="['/meetings', meeting.id]">
+          <strong>{{ meeting.name }}</strong>
+          <span class="chevron" aria-hidden="true"></span>
+          <time [dateTime]="meeting.createdAtUtc">{{ meeting.createdAtUtc | date: 'dd.MM.yyyy, HH:mm' }}</time>
+          <span class="phase" [class.phase-closed]="meeting.phase === 'Closed'">
+            {{ phaseName(meeting.phase) }}
+          </span>
+        </a>
+      </li>
+    }
+  </ul>
+</ng-template>

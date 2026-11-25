@@ -33,9 +33,14 @@ public sealed class VotingService(
             topicId,
             count,
             expectedBallotVersion,
-            timeProvider.GetUtcNow(),
             cancellationToken);
-        return await CompleteAsync(meetingId, result, cancellationToken);
+        EnsureSuccess(result);
+        if (!result.IsReplay)
+        {
+            await notifier.BallotChangedAsync(meetingId, userId, cancellationToken);
+        }
+
+        return result;
     }
 
     public async Task<VotingCommandResult> UpdateSettingsAsync(
@@ -62,13 +67,16 @@ public sealed class VotingService(
             expectedVersion,
             timeProvider.GetUtcNow(),
             cancellationToken);
-        return await CompleteAsync(meetingId, result, cancellationToken);
+        EnsureSuccess(result);
+        if (!result.IsReplay)
+        {
+            await notifier.StateChangedAsync(meetingId, result.Version, cancellationToken);
+        }
+
+        return result;
     }
 
-    private async Task<VotingCommandResult> CompleteAsync(
-        Guid meetingId,
-        VotingCommandResult result,
-        CancellationToken cancellationToken)
+    private static void EnsureSuccess(VotingCommandResult result)
     {
         switch (result.Status)
         {
@@ -85,14 +93,7 @@ public sealed class VotingService(
             case VotingCommandStatus.BudgetTooLow:
                 throw new ConflictException(
                     "VoteBudgetTooLow",
-                    $"Бюджет нельзя установить меньше {result.MinimumBudget}: участники уже потратили больше голосов.");
+                    "Этот бюджет меньше уже потраченных голосов. Задайте больший бюджет.");
         }
-
-        if (!result.IsReplay)
-        {
-            await notifier.StateChangedAsync(meetingId, result.Version, cancellationToken);
-        }
-
-        return result;
     }
 }

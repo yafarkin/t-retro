@@ -62,15 +62,6 @@ public sealed class PdfSharpMeetingReportGenerator : IMeetingReportGenerator
             var total = state.TopicTotals!.Single(item => item.TopicId == topic.Id).TotalVotes;
             writer.Subheading($"{queueItem.Position + 1}. {TopicTitle(state, topic)}");
             writer.Paragraph($"Голосов: {total}. Статус: {StatusText(queueItem.Status)}.");
-            if (!state.Meeting.AnonymousVotes)
-            {
-                foreach (var vote in state.Votes.Where(vote => vote.TopicId == topic.Id))
-                {
-                    var voter = state.Participants.Single(participant => participant.UserId == vote.UserId);
-                    writer.Bullet($"Голос: {voter.DisplayName} — {vote.Count}", 10);
-                }
-            }
-
             foreach (var decision in state.Decisions.Where(item => item.TopicId == topic.Id))
             {
                 writer.Paragraph($"Решение: {decision.Text}", indent: 10);
@@ -87,6 +78,11 @@ public sealed class PdfSharpMeetingReportGenerator : IMeetingReportGenerator
                     ? "без исполнителя"
                     : state.Participants.Single(participant => participant.UserId == action.AssigneeId).DisplayName;
                 writer.Paragraph($"Задача: {action.Text}", indent: 10);
+                if (action.Description is not null)
+                {
+                    writer.Paragraph(action.Description, indent: 20);
+                }
+
                 writer.Paragraph($"Исполнитель: {assignee}", indent: 20);
             }
         }

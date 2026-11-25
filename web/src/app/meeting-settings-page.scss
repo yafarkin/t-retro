@@ -149,42 +149,8 @@ select {
   border: 0;
 }
 
-.vote-breakdown {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--tui-text-secondary);
-}
-
-.discussion-queue-item {
-  display: grid;
-  grid-template-columns: minmax(12rem, 1fr) auto auto auto;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem;
-  border-bottom: 1px solid var(--tui-border-normal);
-}
-
-.discussion-queue-item h3,
-.discussion-queue-item p,
 .discussion-entry p {
   margin: 0.25rem 0;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-}
-
-.discussion-entry textarea,
-.new-entry textarea {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 0.625rem;
-  resize: vertical;
-  border: 1px solid var(--tui-border-normal);
-  border-radius: 0.5rem;
-  font: inherit;
-}
-
-@media (max-width: 800px) {
-  .discussion-queue-item {
-    grid-template-columns: 1fr;
-  }
 }

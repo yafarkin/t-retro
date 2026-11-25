@@ -45,7 +45,6 @@ public sealed class SqliteDatabaseTests : IDisposable
             MeetingPhase.Draft,
             true,
             true,
-            true,
             VoteBudgetSettings.Default,
             null,
             employee.Id,

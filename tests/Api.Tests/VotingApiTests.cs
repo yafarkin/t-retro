@@ -79,7 +79,7 @@ public sealed class VotingApiTests
         Assert.Equal(0, voteResult!.Remaining);
         Assert.Equal(1, voteResult.BallotVersion);
         var afterVote = await StateAsync(lateClient, meeting.Id);
-        Assert.Equal(3, afterVote.Topics.Single(topic => topic.Id == groupTopic.Id).TotalVotes);
+        Assert.Null(afterVote.Topics.Single(topic => topic.Id == groupTopic.Id).TotalVotes);
         Assert.Equal(3, afterVote.Topics.Single(topic => topic.Id == groupTopic.Id).MyVotes);
         Assert.Equal(0, afterVote.Voting!.Remaining);
 
@@ -103,7 +103,7 @@ public sealed class VotingApiTests
         var afterRevoke = await StateAsync(lateClient, meeting.Id);
         Assert.Equal(3, afterRevoke.Voting!.Remaining);
         Assert.Equal(2, afterRevoke.Voting.BallotVersion);
-        Assert.Equal(0, afterRevoke.Topics.Single(topic => topic.Id == groupTopic.Id).TotalVotes);
+        Assert.Equal(0, afterRevoke.Topics.Single(topic => topic.Id == groupTopic.Id).MyVotes);
 
         await using var connection = new SqliteConnection($"Data Source={factory.DatabasePath}");
         await connection.OpenAsync();
@@ -116,22 +116,25 @@ public sealed class VotingApiTests
         Assert.Equal(32L, reader.GetInt64(1));
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task AnonymousAndOpenVotesProjectOnlyAllowedAllocationsAndKeepExcludedVotes(bool anonymous)
+    [Fact]
+    public async Task VotingHidesTotalsAndOtherBallotsUntilDiscussionEvenForAnOldOpenMeeting()
     {
         using var factory = new TRetroWebApplicationFactory();
         await ApiTestHelpers.MigrateAsync(factory);
         using var facilitator = factory.CreateClient();
         using var member = factory.CreateClient();
-        var memberUser = await ApiTestHelpers.LoginAsync(member, $"privacy-vote-member-{anonymous}", "Голосующий");
-        await ApiTestHelpers.LoginAsync(facilitator, $"privacy-vote-facilitator-{anonymous}", "Ведущий");
-        var request = ApiTestHelpers.DefaultMeeting("Приватность M5");
-        request.AnonymousVotes = anonymous;
-        var created = await facilitator.PostAsJsonAsync("/api/meetings", request);
-        created.EnsureSuccessStatusCode();
-        var meeting = (await created.Content.ReadFromJsonAsync<MeetingCreatedResponse>())!;
+        var memberUser = await ApiTestHelpers.LoginAsync(member, "privacy-vote-member", "Голосующий");
+        await ApiTestHelpers.LoginAsync(facilitator, "privacy-vote-facilitator", "Ведущий");
+        var meeting = await ApiTestHelpers.CreateMeetingAsync(facilitator, "Приватность M5");
+        await using (var connection = new SqliteConnection($"Data Source={factory.DatabasePath}"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE meetings SET anonymous_votes = 0 WHERE id = $id;";
+            command.Parameters.AddWithValue("$id", meeting.Id);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+
         await JoinAsync(facilitator, member, meeting.Id);
         await AdvanceAsync(facilitator, meeting.Id, "Draft", 1);
         var columnId = (await StateAsync(member, meeting.Id)).Columns[0].Id;
@@ -140,41 +143,30 @@ public sealed class VotingApiTests
         await AdvanceAsync(facilitator, meeting.Id, "Collect", collected.Version);
         var grouped = await StateAsync(facilitator, meeting.Id);
         await AdvanceAsync(facilitator, meeting.Id, "Group", grouped.Version);
-        var topicId = (await StateAsync(member, meeting.Id)).Topics.Single().Id;
+        var beforeVote = await StateAsync(member, meeting.Id);
+        var topicId = beforeVote.Topics.Single().Id;
         var voted = await SetVotesAsync(member, meeting.Id, topicId, 2, 0);
         voted.EnsureSuccessStatusCode();
 
         var ownState = await StateAsync(member, meeting.Id);
         Assert.Equal(2, ownState.Topics.Single().MyVotes);
-        Assert.Equal(2, ownState.Topics.Single().TotalVotes);
+        Assert.Null(ownState.Topics.Single().TotalVotes);
         var facilitatorResponse = await facilitator.GetAsync($"/api/meetings/{meeting.Id}/state");
         facilitatorResponse.EnsureSuccessStatusCode();
         var raw = await facilitatorResponse.Content.ReadAsStringAsync();
         var facilitatorState = JsonSerializer.Deserialize<MeetingStateResponse>(raw, JsonOptions)!;
-        var projected = facilitatorState.Topics.Single();
-        Assert.Equal(0, projected.MyVotes);
-        Assert.Equal(2, projected.TotalVotes);
-        if (anonymous)
-        {
-            Assert.Null(projected.Voters);
-            Assert.False(JsonDocument.Parse(raw).RootElement.GetProperty("topics")[0].TryGetProperty("voters", out _));
-        }
-        else
-        {
-            var voter = Assert.Single(projected.Voters!);
-            Assert.Equal(memberUser.Id, voter.UserId);
-            Assert.Equal("Голосующий", voter.DisplayName);
-            Assert.Equal(2, voter.Count);
-        }
+        Assert.Equal(beforeVote.Version, facilitatorState.Version);
+        Assert.Equal(0, facilitatorState.Voting!.BallotVersion);
+        Assert.Equal(0, facilitatorState.Topics.Single().MyVotes);
+        using var voteJson = JsonDocument.Parse(raw);
+        var topicJson = voteJson.RootElement.GetProperty("topics")[0];
+        Assert.False(topicJson.TryGetProperty("totalVotes", out _));
+        Assert.False(topicJson.TryGetProperty("voters", out _));
 
         var excluded = await facilitator.PostAsync($"/api/meetings/{meeting.Id}/members/{memberUser.Id}/exclude", null);
         excluded.EnsureSuccessStatusCode();
         var afterExclusion = await StateAsync(facilitator, meeting.Id);
-        Assert.Equal(2, afterExclusion.Topics.Single().TotalVotes);
-        if (!anonymous)
-        {
-            Assert.Equal(memberUser.Id, Assert.Single(afterExclusion.Topics.Single().Voters!).UserId);
-        }
+        Assert.Null(afterExclusion.Topics.Single().TotalVotes);
         Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/meetings/{meeting.Id}/state")).StatusCode);
         var tooLow = await facilitator.PutAsJsonAsync(
             $"/api/meetings/{meeting.Id}/vote-settings",
@@ -186,6 +178,12 @@ public sealed class VotingApiTests
             });
         Assert.Equal(HttpStatusCode.Conflict, tooLow.StatusCode);
         Assert.Equal("VoteBudgetTooLow", (await tooLow.Content.ReadFromJsonAsync<ErrorResponse>())!.Code);
+        await AdvanceAsync(facilitator, meeting.Id, "Vote", afterExclusion.Version);
+        using var discussionJson = JsonDocument.Parse(await facilitator.GetStringAsync($"/api/meetings/{meeting.Id}/state"));
+        var discussed = discussionJson.RootElement.GetProperty("topics")[0];
+        Assert.Equal(2, discussed.GetProperty("totalVotes").GetInt32());
+        Assert.False(discussed.TryGetProperty("myVotes", out _));
+        Assert.False(discussed.TryGetProperty("voters", out _));
     }
 
     [Fact]
@@ -237,7 +235,7 @@ public sealed class VotingApiTests
         Assert.Equal(HttpStatusCode.Conflict, tooLow.StatusCode);
         var error = await tooLow.Content.ReadFromJsonAsync<ErrorResponse>();
         Assert.Equal("VoteBudgetTooLow", error!.Code);
-        Assert.Contains("3", error.Message);
+        Assert.DoesNotContain("3", error.Message);
 
         foreach (var topicId in topics.Skip(1))
         {

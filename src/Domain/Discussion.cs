@@ -39,17 +39,21 @@ public sealed record TopicComment(
     Guid Id,
     Guid MeetingId,
     Guid TopicId,
-    string Text);
+    string Text,
+    int? CreatedVersion = null);
 
 public sealed record TopicDecision(
     Guid Id,
     Guid MeetingId,
     Guid TopicId,
-    string Text);
+    string Text,
+    int? CreatedVersion = null);
 
 public sealed record ActionItem(
     Guid Id,
     Guid MeetingId,
     Guid TopicId,
     string Text,
-    Guid? AssigneeId);
+    Guid? AssigneeId,
+    string? Description = null,
+    int? CreatedVersion = null);

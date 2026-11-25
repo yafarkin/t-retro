@@ -77,7 +77,8 @@ public sealed class DiscussionService(
                 CommandFingerprint.Create("Comment", topicId, comment.Text),
                 now,
                 cancellationToken),
-            cancellationToken);
+            cancellationToken,
+            requireFacilitator: false);
     }
 
     public Task<MeetingCommandResult> UpdateCommentAsync(
@@ -186,13 +187,18 @@ public sealed class DiscussionService(
         Guid meetingId,
         Guid topicId,
         string? text,
+        string? description,
         Guid? assigneeId,
         int expectedVersion,
         Guid operationId,
         CancellationToken cancellationToken)
     {
         ValidateOperationId(operationId);
-        var action = new ActionItem(Guid.NewGuid(), meetingId, topicId, ValidateText(text), assigneeId);
+        var action = new ActionItem(
+            Guid.NewGuid(), meetingId, topicId, ValidateText(text), assigneeId, ValidateDescription(description));
+        var fingerprint = action.Description is null
+            ? CommandFingerprint.Create("Action", topicId, action.Text, assigneeId)
+            : CommandFingerprint.Create("Action", topicId, action.Text, assigneeId, action.Description);
         return ExecuteAsync(
             userId,
             meetingId,
@@ -201,10 +207,11 @@ public sealed class DiscussionService(
                 userId,
                 expectedVersion,
                 operationId,
-                CommandFingerprint.Create("Action", topicId, action.Text, assigneeId),
+                fingerprint,
                 now,
                 cancellationToken),
-            cancellationToken);
+            cancellationToken,
+            requireFacilitator: false);
     }
 
     public Task<MeetingCommandResult> UpdateActionAsync(
@@ -212,6 +219,7 @@ public sealed class DiscussionService(
         Guid meetingId,
         Guid actionId,
         string? text,
+        string? description,
         Guid? assigneeId,
         int expectedVersion,
         CancellationToken cancellationToken) =>
@@ -223,6 +231,7 @@ public sealed class DiscussionService(
                 actionId,
                 userId,
                 ValidateText(text),
+                ValidateDescription(description),
                 assigneeId,
                 expectedVersion,
                 now,
@@ -251,9 +260,10 @@ public sealed class DiscussionService(
         Guid userId,
         Guid meetingId,
         Func<DateTimeOffset, Task<MeetingCommandResult>> command,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool requireFacilitator = true)
     {
-        await access.GetAsync(userId, meetingId, true, cancellationToken);
+        await access.GetAsync(userId, meetingId, requireFacilitator, cancellationToken);
         var result = await command(timeProvider.GetUtcNow());
         switch (result.Status)
         {
@@ -282,6 +292,9 @@ public sealed class DiscussionService(
 
         return result;
     }
+
+    private static string? ValidateDescription(string? description) =>
+        string.IsNullOrWhiteSpace(description) ? null : ValidateText(description);
 
     private static string ValidateText(string? text) => RequiredText.Create(text, 4000);
 

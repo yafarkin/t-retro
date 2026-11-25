@@ -5,6 +5,7 @@ namespace Application;
 public sealed record MeetingDiscussion(
     IReadOnlyList<DiscussionTopic> Queue,
     Guid? CurrentTopicId,
+    int SelectionVersion,
     IReadOnlyList<TopicComment> Comments,
     IReadOnlyList<TopicDecision> Decisions,
     IReadOnlyList<ActionItem> Actions,
@@ -32,7 +33,7 @@ public interface IDiscussionRepository
 
     Task<MeetingCommandResult> CreateCommentAsync(
         TopicComment comment,
-        Guid facilitatorId,
+        Guid userId,
         int expectedVersion,
         Guid operationId,
         string fingerprint,
@@ -84,7 +85,7 @@ public interface IDiscussionRepository
 
     Task<MeetingCommandResult> CreateActionAsync(
         ActionItem action,
-        Guid facilitatorId,
+        Guid userId,
         int expectedVersion,
         Guid operationId,
         string fingerprint,
@@ -96,6 +97,7 @@ public interface IDiscussionRepository
         Guid actionId,
         Guid facilitatorId,
         string text,
+        string? description,
         Guid? assigneeId,
         int expectedVersion,
         DateTimeOffset nowUtc,

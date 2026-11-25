@@ -39,10 +39,11 @@ test('M8 mock Jira export shares created status and locks the action in two cont
   await advanceBeforeEveryoneIsReady(first, 'Открыть голосование');
   await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Голосование');
   await advanceBeforeEveryoneIsReady(first, 'Перейти к обсуждению');
-  await expect(second.getByRole('heading', { name: 'Текущая тема: Тема для экспорта' })).toBeVisible();
+  await expect(second.getByRole('heading', { name: 'Тема для экспорта' })).toBeVisible();
 
-  await first.getByLabel('Новая задача').fill('Задача для mock Jira');
-  await first.getByLabel('Исполнитель новой задачи').selectOption({ label: 'Второй M8' });
+  await first.getByRole('button', { name: 'Задача', exact: true }).click();
+  await first.getByLabel('Краткое название').fill('Задача для mock Jira');
+  await first.getByLabel('Исполнитель').selectOption({ label: 'Второй M8' });
   await first.getByRole('button', { name: 'Добавить задачу' }).click();
   await expect(second.getByText('Задача для mock Jira', { exact: true })).toBeVisible();
   await expect(second.getByText('Исполнитель: Второй M8', { exact: true })).toBeVisible();
@@ -54,11 +55,10 @@ test('M8 mock Jira export shares created status and locks the action in two cont
   const issueLink = second.getByRole('link', { name: /^MOCK-/ });
   await expect(issueLink).toBeVisible();
   await expect(issueLink).toHaveAttribute('href', /^https:\/\/jira\.local\.invalid\/browse\/MOCK-/);
-  await expect(second.getByText(/externalRequestId: [0-9a-f-]{36}/)).toBeVisible();
   await expect(first.getByRole('button', { name: 'Экспортировать в mock Jira' })).toHaveCount(0);
-  await expect(first.getByRole('button', { name: 'Изменить задачу' })).toBeDisabled();
-  await expect(first.getByRole('button', { name: 'Удалить задачу' })).toBeDisabled();
-  await expect(second.getByRole('button', { name: 'Изменить задачу' })).toHaveCount(0);
+  await expect(first.getByRole('button', { name: 'Изменить: Задача для mock Jira' })).toBeDisabled();
+  await expect(first.getByRole('button', { name: 'Удалить: Задача для mock Jira' })).toBeDisabled();
+  await expect(second.getByRole('button', { name: 'Изменить: Задача для mock Jira' })).toHaveCount(0);
 
   await Promise.all([firstContext, secondContext].map(closeContextGracefully));
 });

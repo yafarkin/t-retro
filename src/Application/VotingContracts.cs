@@ -2,15 +2,12 @@ using Domain;
 
 namespace Application;
 
-public sealed record MeetingTopicVoter(Guid UserId, string DisplayName, int Count);
-
 public sealed record MeetingTopicResult(
     Guid Id,
     TopicKind Kind,
     Guid SourceId,
-    int TotalVotes,
-    int MyVotes,
-    IReadOnlyList<MeetingTopicVoter>? Voters);
+    int? TotalVotes,
+    int? MyVotes);
 
 public sealed record MeetingVoting(
     int OriginalCardCount,
@@ -35,7 +32,6 @@ public sealed record VotingCommandResult(
     int Version = 0,
     int BallotVersion = 0,
     int Remaining = 0,
-    int MinimumBudget = 0,
     bool IsReplay = false);
 
 public interface IVotingRepository
@@ -46,7 +42,6 @@ public interface IVotingRepository
         Guid topicId,
         int count,
         int expectedBallotVersion,
-        DateTimeOffset nowUtc,
         CancellationToken cancellationToken);
 
     Task<VotingCommandResult> UpdateSettingsAsync(

@@ -19,6 +19,14 @@ public interface IMeetingRepository
 
     Task<IReadOnlyList<MeetingSummary>> ListForUserAsync(
         Guid userId,
+        bool archived,
+        CancellationToken cancellationToken);
+
+    Task<int?> ArchiveAsync(
+        Guid meetingId,
+        Guid facilitatorId,
+        int expectedVersion,
+        DateTimeOffset nowUtc,
         CancellationToken cancellationToken);
 
     Task<int> UpdateDraftAsync(

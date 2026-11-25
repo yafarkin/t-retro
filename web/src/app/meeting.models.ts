@@ -25,7 +25,6 @@ export interface MeetingSettingsPayload {
   columns: EditableColumn[];
   anonymousCards: boolean;
   privateCollection: boolean;
-  anonymousVotes: boolean;
   votingEnabled?: boolean;
   voteSettings: VoteSettings;
 }
@@ -75,19 +74,12 @@ export interface MeetingReadiness {
   myReady: boolean;
 }
 
-export interface MeetingTopicVoter {
-  userId: string;
-  displayName: string;
-  count: number;
-}
-
 export interface MeetingTopic {
   id: string;
   kind: 'card' | 'group';
   sourceId: string;
-  totalVotes: number;
-  myVotes: number;
-  voters?: MeetingTopicVoter[];
+  totalVotes?: number;
+  myVotes?: number;
 }
 
 export interface MeetingVoting {
@@ -110,18 +102,22 @@ export interface TopicComment {
   id: string;
   topicId: string;
   text: string;
+  createdVersion: number | null;
 }
 
 export interface TopicDecision {
   id: string;
   topicId: string;
   text: string;
+  createdVersion: number | null;
 }
 
 export interface ActionItem {
   id: string;
   topicId: string;
   text: string;
+  createdVersion: number | null;
+  description: string | null;
   assigneeId: string | null;
   exportStatus: 'notExported' | 'pending' | 'created' | 'rejected' | 'unknown' | 'unavailable';
   externalRequestId: string | null;
@@ -139,6 +135,7 @@ export interface JiraExportResult {
 
 export interface MeetingDiscussion {
   currentTopicId: string | null;
+  selectionVersion: number;
   queue: DiscussionTopic[];
   comments: TopicComment[];
   decisions: TopicDecision[];
@@ -173,6 +170,7 @@ export interface MeetingTotals {
 }
 
 export interface MeetingState extends MeetingSettingsPayload {
+  isArchived: boolean;
   serverNowUtc: string;
   id: string;
   phase: MeetingPhase;

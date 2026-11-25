@@ -134,20 +134,29 @@
             <dialog #advanceDialog class="meeting-dialog phase-confirmation" aria-labelledby="advance-title"
               aria-describedby="advance-description" (close)="confirmAdvance(advanceDialog)">
               @let readiness = meeting.readiness;
+              @let isCompleting = meeting.phase === 'Discuss';
               <header class="meeting-dialog-heading">
                 <h2 id="advance-title">
-                  {{ readiness && readiness.readyCount < readiness.totalCount ? 'Не все участники готовы' : 'Подтвердите переход' }}
+                  @if (isCompleting) {
+                    Завершить ретро?
+                  } @else {
+                    {{ readiness && readiness.readyCount < readiness.totalCount ? 'Не все участники готовы' : 'Подтвердите переход' }}
+                  }
                 </h2>
               </header>
               <p id="advance-description">
-                @if (readiness) { Готовность отметили {{ readiness.readyCount }} из {{ readiness.totalCount }}. }
-                Перейти к следующему этапу?
+                @if (isCompleting) {
+                  Встреча завершится, и участники смогут скачать PDF с итогами.
+                } @else {
+                  @if (readiness) { Готовность отметили {{ readiness.readyCount }} из {{ readiness.totalCount }}. }
+                  Перейти к следующему этапу?
+                }
               </p>
               <div class="inline phase-confirmation-actions">
                 <button tuiButton type="button" size="s" appearance="secondary" autofocus
                   (click)="advanceDialog.close()">Отмена</button>
                 <button tuiButton type="button" size="s" [disabled]="commandsBlocked()"
-                  (click)="advanceDialog.close('advance')">Перейти дальше</button>
+                  (click)="advanceDialog.close('advance')">{{ isCompleting ? 'Завершить ретро' : 'Перейти дальше' }}</button>
               </div>
             </dialog>
           } @else if (facilitator(); as currentFacilitator) {
@@ -155,6 +164,26 @@
           } @else {
             <p class="phase-guidance">Этап можно сменить после назначения фасилитатора.</p>
           }
+        }
+        @if (meeting.phase === 'Closed' || meeting.canManage) {
+          <div class="results-actions inline">
+            @if (meeting.phase === 'Closed' && meeting.totals) {
+              <a tuiButton size="s" href="/api/meetings/{{ meeting.id }}/report.pdf" target="_blank" rel="noopener noreferrer">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 3v12m-4-4 4 4 4-4M4 16v4h16v-4" />
+                </svg>
+                Скачать PDF
+              </a>
+            }
+            @if (meeting.canManage) {
+              @if (meeting.isArchived) {
+                <span class="hint">В архиве</span>
+              } @else {
+                <button tuiButton type="button" size="s" appearance="secondary"
+                  (click)="archiveMeeting()" [disabled]="commandsBlocked()">Архивировать ретро</button>
+              }
+            }
+          </div>
         }
         @if (isTimerPhase(meeting.phase)) {
           <div class="timer-section">
@@ -174,9 +203,9 @@
                   <input id="active-vote-budget" name="activeVoteBudget" type="number" min="1" max="2147483647" step="1"
                     [(ngModel)]="voteBudgetDraft" required autofocus />
                   @if (voteBudgetError(); as message) { <p class="error" role="alert">{{ message }}</p> }
-                  <div class="inline vote-budget-actions">
+                  <div class="vote-budget-actions">
                     <button tuiButton type="button" size="s" appearance="secondary" (click)="voteBudgetDialog.close()">Отмена</button>
-                    <button tuiButton type="submit" size="s" [disabled]="commandsBlocked() || !validVoteBudget()">Сохранить бюджет</button>
+                    <button tuiButton type="submit" size="s" [disabled]="commandsBlocked() || !validVoteBudget()">Сохранить</button>
                   </div>
                 </form>
               </dialog>
@@ -193,236 +222,240 @@
         }
       </div>
 
+      <ng-template #entryContent let-item>
+        @let entry = item.entry;
+        @let action = item.kind === 'actions' ? entry : null;
+        <small class="discussion-entry-label">{{ discussionEntryLabel(item.kind) }}</small>
+        <p [class.discussion-task-summary]="action">{{ entry.text }}</p>
+        @if (action) {
+          @if (action.description) { <p>{{ action.description }}</p> }
+          <p class="hint">Исполнитель: {{ actionAssigneeName(action.assigneeId) }}</p>
+          @if (meeting.integrations.jira || action.exportStatus !== 'notExported') {
+            <p class="hint">{{ exportStatusLabel(action.exportStatus) }}</p>
+          }
+          @if (action.issueKey; as issueKey) {
+            <p><a [href]="action.issueUrl" target="_blank" rel="noopener noreferrer">{{ issueKey }}</a></p>
+          }
+        }
+      </ng-template>
+
       @if (meeting.phase === 'Closed') {
-        @if (meeting.totals; as totals) {
-          <section class="closed-summary">
-            <h2>Итоги встречи</h2>
-            <p>Завершена {{ formatClosedAt(totals.closedAtUtc) }} UTC.</p>
-            <p>Участников: {{ totals.participantCount }}. Карточек: {{ totals.cardCount }}. Тем: {{ totals.topicCount }}. Голосов: {{ totals.voteCount }}.</p>
-            <a tuiButton href="/api/meetings/{{ meeting.id }}/report.pdf" target="_blank" rel="noopener noreferrer">Скачать PDF</a>
-          </section>
-        }
-        @if (meeting.discussion; as discussion) {
-          <section class="discussion-queue closed-results">
-            <h2>Рейтинг и итоги обсуждения</h2>
-            @for (queueItem of discussion.queue; track queueItem.topicId) {
-              @if (discussionTopic(queueItem.topicId); as topic) {
-                <article class="discussion-queue-item">
-                  <h3>{{ queueItem.position + 1 }}. {{ topicTitle(topic) }}</h3>
-                  <p>{{ topicColumnName(topic) }} · Всего голосов: {{ topic.totalVotes }} · {{ discussionStatusLabel(queueItem.status) }}</p>
-                  @if (topic.voters; as voters) {
-                    <ul class="vote-breakdown" aria-label="Расклад голосов">
-                      @for (voter of voters; track voter.userId) {
-                        <li>{{ voter.displayName }}: {{ voter.count }}</li>
-                      }
-                    </ul>
-                  }
-                  @for (decision of decisionsForTopic(topic.id); track decision.id) {
-                    <p><strong>Решение:</strong> {{ decision.text }}</p>
-                  }
-                  @for (comment of commentsForTopic(topic.id); track comment.id) {
-                    <p><strong>Комментарий:</strong> {{ comment.text }}</p>
-                  }
-                  @for (action of actionsForTopic(topic.id); track action.id) {
-                    <div class="discussion-entry">
-                      <p><strong>Задача:</strong> {{ action.text }}</p>
-                      <p>Исполнитель: {{ actionAssigneeName(action.assigneeId) }}</p>
-                      <p class="hint">{{ exportStatusLabel(action.exportStatus) }}</p>
-                      @if (action.issueKey; as issueKey) {
-                        <p><a [href]="action.issueUrl" target="_blank" rel="noopener noreferrer">{{ issueKey }}</a></p>
-                      }
-                      @if (canExport(action)) {
-                        <button tuiButton type="button" size="s" (click)="exportAction(action)" [disabled]="commandsBlocked()">Экспортировать в mock Jira</button>
-                      }
-                    </div>
-                  }
-                </article>
-              }
-            } @empty {
-              <p>Тем для обсуждения нет.</p>
-            }
-          </section>
-        }
+        <h2 class="visually-hidden">Итоги встречи</h2>
       }
+      <dialog #resultsPanel class="meeting-dialog results-panel" aria-labelledby="results-panel-title">
+        <header class="meeting-dialog-heading">
+          <h2 id="results-panel-title">Записи обсуждения</h2>
+          <button tuiButton type="button" size="s" appearance="secondary" (click)="resultsPanel.close()" autofocus>Закрыть</button>
+        </header>
+        @if (resultTopic(); as topic) {
+          <h3>{{ topicTitle(topic) }}</h3>
+          <ol class="discussion-feed" role="list">
+            @for (item of discussionEntriesByTopic().get(topic.id) ?? []; track item.entry.id) {
+              <li class="discussion-entry" [class.discussion-task]="item.kind === 'actions'">
+                <ng-container *ngTemplateOutlet="entryContent; context: { $implicit: item }" />
+              </li>
+            } @empty {
+              <li class="hint">По этой теме нет записей.</li>
+            }
+          </ol>
+        }
+      </dialog>
 
       @if (meeting.phase === 'Discuss' && meeting.discussion; as discussion) {
-        <section class="discussion-queue">
-          <h2>Рейтинг тем</h2>
-          @for (queueItem of discussion.queue; track queueItem.topicId) {
-            @if (discussionTopic(queueItem.topicId); as topic) {
-              <article class="discussion-queue-item" [class.current-discussion-topic]="queueItem.topicId === discussion.currentTopicId">
-                <div>
-                  <h3>{{ topicTitle(topic) }}</h3>
-                  <p>{{ topicColumnName(topic) }} · Всего голосов: {{ topic.totalVotes }}</p>
-                </div>
-                <span>{{ discussionStatusLabel(queueItem.status) }}</span>
-                @if (queueItem.topicId === discussion.currentTopicId) {
-                  <strong>Текущая тема</strong>
+        <div class="discussion-layout">
+          <nav class="discussion-agenda" aria-labelledby="discussion-agenda-title">
+            <h2 id="discussion-agenda-title">Темы по голосам</h2>
+            <ul class="discussion-topic-list">
+              @for (item of discussion.queue; track item.topicId) {
+                @if (discussionTopic(item.topicId); as topic) {
+                  <li>
+                    <button type="button" class="discussion-topic-button"
+                      [class.discussed-topic]="item.status === 'discussed'"
+                      [attr.aria-current]="currentTopic()?.id === topic.id ? 'true' : null"
+                      [attr.aria-label]="'Выбрать тему: ' + topicTitle(topic)"
+                      [attr.aria-describedby]="'topic-score-' + topic.id + (item.status !== 'pending' ? ' topic-status-' + topic.id : '')"
+                      [disabled]="meeting.canManage && commandsBlocked()"
+                      (click)="selectDiscussionTopic(topic.id)">
+                      <span class="discussion-topic-preview">
+                        <strong>{{ topicTitle(topic) }}</strong>
+                        @if (item.status !== 'pending') {
+                          <small [id]="'topic-status-' + topic.id">{{ discussionStatusLabel(item.status) }}</small>
+                        }
+                        @if (item.topicId === discussion.currentTopicId && currentTopic()?.id !== topic.id) {
+                          <small>У фасилитатора</small>
+                        }
+                      </span>
+                      <span class="discussion-score" [id]="'topic-score-' + topic.id">
+                        <span class="visually-hidden">Всего голосов: </span>{{ topic.totalVotes }}
+                      </span>
+                    </button>
+                  </li>
                 }
-                @if (meeting.canManage) {
-                  <button
-                    tuiButton
-                    type="button"
-                    size="s"
-                    appearance="secondary"
-                    [attr.aria-label]="'Выбрать тему: ' + topicTitle(topic)"
-                    (click)="selectDiscussionTopic(topic.id)"
-                    [disabled]="queueItem.topicId === discussion.currentTopicId || commandsBlocked()">Выбрать</button>
-                }
-              </article>
-            }
-          } @empty {
-            <p>Тем для обсуждения нет.</p>
-          }
-        </section>
-
-        @if (currentTopic(); as topic) {
-          <section class="current-topic">
-            <h2>Текущая тема: {{ topicTitle(topic) }}</h2>
-            <div class="current-topic-cards">
-              @for (card of currentTopicCards(); track card.id) {
-                <article class="card">
-                  <p class="card-text">{{ card.text }}</p>
-                  @if (card.authorDisplayName; as author) { <footer>{{ author }}</footer> }
-                </article>
+              } @empty {
+                <li class="hint">Тем для обсуждения нет.</li>
               }
-            </div>
-            @if (meeting.canManage) {
-              <div class="inline discussion-actions">
-                <button tuiButton type="button" size="s" appearance="secondary" (click)="setDiscussionStatus('discussed', false)" [disabled]="commandsBlocked()">Отметить обсуждённой</button>
-                <button tuiButton type="button" size="s" appearance="secondary" (click)="setDiscussionStatus('skipped', false)" [disabled]="commandsBlocked()">Пропустить</button>
-                <button tuiButton type="button" size="s" (click)="setDiscussionStatus('discussed', true)" [disabled]="commandsBlocked()">Обсуждена, далее</button>
-                <button tuiButton type="button" size="s" appearance="secondary" (click)="setDiscussionStatus('skipped', true)" [disabled]="commandsBlocked()">Пропустить и далее</button>
+            </ul>
+          </nav>
+
+          @if (currentTopic(); as topic) {
+            @let item = currentDiscussionItem();
+            <section class="discussion-workspace" aria-labelledby="discussion-topic-title">
+              <header class="discussion-workspace-header">
+                <div class="discussion-topic-heading">
+                  <span class="hint">{{ topicColumnName(topic) }}, голосов: {{ topic.totalVotes }}</span>
+                  <h2 id="discussion-topic-title">{{ topicTitle(topic) }}</h2>
+                </div>
+                @if (meeting.canManage) {
+                  <div class="discussion-navigation">
+                    @if (item?.status === 'discussed') {
+                      <button tuiButton type="button" size="s" appearance="secondary" [disabled]="commandsBlocked()"
+                        (click)="setDiscussionStatus('pending', false)">Снять отметку</button>
+                    } @else {
+                      <button tuiButton type="button" size="s" appearance="secondary" [disabled]="commandsBlocked()"
+                        (click)="setDiscussionStatus('discussed', false)">Отметить обсуждённой</button>
+                    }
+                    <button tuiButton type="button" size="s" [disabled]="commandsBlocked() || !hasNextDiscussionTopic()"
+                      (click)="setDiscussionStatus('discussed', true)">Далее</button>
+                  </div>
+                }
+              </header>
+
+              <div class="current-topic-cards" [class.single-topic-card]="topic.kind === 'card'">
+                @for (card of currentTopicCards(); track card.id) {
+                  @if (topic.kind === 'group' || card.authorDisplayName) {
+                    <article>
+                      @if (topic.kind === 'group') { <p>{{ card.text }}</p> }
+                      @if (card.authorDisplayName; as author) { <footer>{{ author }}</footer> }
+                    </article>
+                  }
+                }
               </div>
-            }
-          </section>
 
-          <section class="discussion-entries">
-            <h2>Решения</h2>
-            @for (decision of currentDecisions(); track decision.id) {
-              <article class="discussion-entry">
-                @if (isEntryEditing('decisions', decision.id)) {
-                  <label>Редактирование решения<textarea aria-label="Текст решения" name="edit-decision" [(ngModel)]="editingEntryText" maxlength="4000" rows="3"></textarea></label>
-                  <div class="inline">
-                    <button tuiButton type="button" size="s" (click)="saveEntryEdit()" [disabled]="commandsBlocked()">Сохранить решение</button>
-                    <button tuiButton type="button" size="s" appearance="secondary" (click)="cancelEntryEdit()" [disabled]="commandsBlocked()">Отмена</button>
-                  </div>
-                } @else {
-                  <p>{{ decision.text }}</p>
-                  @if (meeting.canManage) {
-                    <div class="inline">
-                      <button tuiButton type="button" size="s" appearance="secondary" (click)="startEntryEdit('decisions', decision)" [disabled]="commandsBlocked()">Изменить решение</button>
-                      <button tuiButton type="button" size="s" appearance="secondary" (click)="deleteEntry('decisions', decision.id)" [disabled]="commandsBlocked()">Удалить решение</button>
-                    </div>
+              <div class="discussion-thread">
+                <h3>Записи обсуждения</h3>
+                <ol class="discussion-feed">
+                  @for (item of discussionEntries(); track item.entry.id) {
+                    @let entry = item.entry;
+                    @let kind = item.kind;
+                    @let action = item.kind === 'actions' ? item.entry : null;
+                    <li class="discussion-entry" [class.discussion-task]="action">
+                      @if (meeting.canManage && isEntryEditing(kind, entry.id)) {
+                        <form class="discussion-entry-form" (ngSubmit)="saveEntryEdit()">
+                          <label>{{ action ? 'Краткое название' : discussionEntryLabel(kind) }}
+                            <textarea name="edit-entry" [(ngModel)]="editingEntryText" maxlength="4000" rows="2" required></textarea>
+                          </label>
+                          @if (action) {
+                            <label>Описание
+                              <textarea name="edit-description" [(ngModel)]="editingActionDescription" maxlength="4000" rows="3"></textarea>
+                            </label>
+                            <label>Исполнитель
+                              <select name="edit-assignee" [(ngModel)]="editingActionAssignee">
+                                <option value="">Без исполнителя</option>
+                                @for (participant of availableAssignees(action.assigneeId); track participant.id) {
+                                  <option [value]="participant.id">{{ participant.displayName }}</option>
+                                }
+                              </select>
+                            </label>
+                          }
+                          <div class="discussion-entry-actions">
+                            <button tuiButton type="button" size="s" appearance="secondary" (click)="cancelEntryEdit()">Отмена</button>
+                            <button tuiButton type="submit" size="s"
+                              [disabled]="commandsBlocked() || !editingEntryText().trim()">{{ discussionSaveLabels[kind] }}</button>
+                          </div>
+                        </form>
+                      } @else {
+                        <ng-container *ngTemplateOutlet="entryContent; context: { $implicit: item }" />
+                        <div class="discussion-entry-actions">
+                          @if (action && canExport(action)) {
+                            <button tuiButton type="button" size="s" appearance="secondary"
+                              (click)="exportAction(action)" [disabled]="commandsBlocked()">Экспортировать в mock Jira</button>
+                          }
+                          @if (meeting.canManage) {
+                            <button tuiButton type="button" size="s" appearance="flat"
+                              [attr.aria-label]="'Изменить: ' + entry.text"
+                              (click)="startEntryEdit(kind, entry)"
+                              [disabled]="commandsBlocked() || (action && isActionLocked(action))">Изменить</button>
+                            <button tuiButton type="button" size="s" appearance="flat"
+                              [attr.aria-label]="'Удалить: ' + entry.text"
+                              (click)="deleteEntry(kind, entry.id)"
+                              [disabled]="commandsBlocked() || (action && isActionLocked(action))">Удалить</button>
+                          }
+                        </div>
+                      }
+                    </li>
                   }
-                }
-              </article>
-            } @empty {
-              <p class="hint">Решений пока нет.</p>
-            }
-            @if (meeting.canManage) {
-              <form class="new-entry" (ngSubmit)="createDecision()">
-                <label>Новое решение<textarea aria-label="Новое решение" name="new-decision" [(ngModel)]="newDecisionText" maxlength="4000" rows="3" required></textarea></label>
-                <button tuiButton type="submit" size="s" [disabled]="!newDecisionText().trim() || commandsBlocked()">Добавить решение</button>
-              </form>
-            }
-          </section>
+                </ol>
+              </div>
 
-          <section class="discussion-entries">
-            <h2>Комментарии</h2>
-            @for (comment of currentComments(); track comment.id) {
-              <article class="discussion-entry">
-                @if (isEntryEditing('comments', comment.id)) {
-                  <label>Редактирование комментария<textarea aria-label="Текст комментария" name="edit-comment" [(ngModel)]="editingEntryText" maxlength="4000" rows="3"></textarea></label>
-                  <div class="inline">
-                    <button tuiButton type="button" size="s" (click)="saveEntryEdit()" [disabled]="commandsBlocked()">Сохранить комментарий</button>
-                    <button tuiButton type="button" size="s" appearance="secondary" (click)="cancelEntryEdit()" [disabled]="commandsBlocked()">Отмена</button>
-                  </div>
-                } @else {
-                  <p>{{ comment.text }}</p>
+              @let draft = discussionDraft();
+              @let kind = !meeting.canManage && draft.kind === 'decisions' ? 'comments' : draft.kind;
+              <form class="discussion-composer discussion-entry-form" (ngSubmit)="addDiscussionEntry()">
+                <div class="discussion-entry-types" role="group" aria-label="Тип записи">
+                  <button type="button"
+                    [attr.aria-pressed]="kind === 'comments'" (click)="updateDiscussionDraft({kind: 'comments'})">Комментарий</button>
+                  <button type="button"
+                    [attr.aria-pressed]="kind === 'actions'" (click)="updateDiscussionDraft({kind: 'actions'})">Задача</button>
                   @if (meeting.canManage) {
-                    <div class="inline">
-                      <button tuiButton type="button" size="s" appearance="secondary" (click)="startEntryEdit('comments', comment)" [disabled]="commandsBlocked()">Изменить комментарий</button>
-                      <button tuiButton type="button" size="s" appearance="secondary" (click)="deleteEntry('comments', comment.id)" [disabled]="commandsBlocked()">Удалить комментарий</button>
-                    </div>
+                    <button type="button"
+                      [attr.aria-pressed]="kind === 'decisions'" (click)="updateDiscussionDraft({kind: 'decisions'})">Решение</button>
                   }
-                }
-              </article>
-            } @empty {
-              <p class="hint">Комментариев пока нет.</p>
-            }
-            @if (meeting.canManage) {
-              <form class="new-entry" (ngSubmit)="createComment()">
-                <label>Новый комментарий<textarea aria-label="Новый комментарий" name="new-comment" [(ngModel)]="newCommentText" maxlength="4000" rows="3" required></textarea></label>
-                <button tuiButton type="submit" size="s" [disabled]="!newCommentText().trim() || commandsBlocked()">Добавить комментарий</button>
-              </form>
-            }
-          </section>
-
-          <section class="discussion-entries">
-            <h2>Задачи</h2>
-            @for (action of currentActions(); track action.id) {
-              <article class="discussion-entry">
-                @if (isEntryEditing('actions', action.id)) {
-                  <label>Редактирование задачи<textarea aria-label="Текст задачи" name="edit-action" [(ngModel)]="editingEntryText" maxlength="4000" rows="3"></textarea></label>
+                </div>
+                @if (kind === 'actions') {
+                  <label>Краткое название
+                    <input name="summary" [ngModel]="draft.text" (ngModelChange)="updateDiscussionDraft({text: $event})"
+                      maxlength="4000" required />
+                  </label>
+                  <label><span>Описание <small class="hint">(необязательно)</small></span>
+                    <textarea name="description" [ngModel]="draft.description"
+                      (ngModelChange)="updateDiscussionDraft({description: $event})" maxlength="4000" rows="3"></textarea>
+                  </label>
                   <label>Исполнитель
-                    <select aria-label="Исполнитель задачи" name="edit-action-assignee" [(ngModel)]="editingActionAssignee">
+                    <select name="assignee" [ngModel]="draft.assignee" (ngModelChange)="updateDiscussionDraft({assignee: $event})">
                       <option value="">Без исполнителя</option>
-                      @for (participant of availableAssignees(action.assigneeId); track participant.id) {
+                      @for (participant of availableAssignees(); track participant.id) {
                         <option [value]="participant.id">{{ participant.displayName }}</option>
                       }
                     </select>
                   </label>
-                  <div class="inline">
-                    <button tuiButton type="button" size="s" (click)="saveEntryEdit()" [disabled]="commandsBlocked()">Сохранить задачу</button>
-                    <button tuiButton type="button" size="s" appearance="secondary" (click)="cancelEntryEdit()" [disabled]="commandsBlocked()">Отмена</button>
-                  </div>
                 } @else {
-                  <p>{{ action.text }}</p>
-                  <p>Исполнитель: {{ actionAssigneeName(action.assigneeId) }}</p>
-                  <p class="hint">{{ exportStatusLabel(action.exportStatus) }}</p>
-                  @if (action.issueKey; as issueKey) {
-                    <p><a [href]="action.issueUrl" target="_blank" rel="noopener noreferrer">{{ issueKey }}</a></p>
-                  }
-                  @if (action.externalRequestId; as externalRequestId) {
-                    <p class="hint">externalRequestId: {{ externalRequestId }}</p>
-                  }
-                  @if (canExport(action)) {
-                    <button tuiButton type="button" size="s" (click)="exportAction(action)" [disabled]="commandsBlocked()">Экспортировать в mock Jira</button>
-                  }
-                  @if (meeting.canManage) {
-                    <div class="inline">
-                      <button tuiButton type="button" size="s" appearance="secondary" (click)="startEntryEdit('actions', action)" [disabled]="commandsBlocked() || isActionLocked(action)">Изменить задачу</button>
-                      <button tuiButton type="button" size="s" appearance="secondary" (click)="deleteEntry('actions', action.id)" [disabled]="commandsBlocked() || isActionLocked(action)">Удалить задачу</button>
-                    </div>
-                  }
+                  <label>{{ kind === 'decisions' ? 'Новое решение' : 'Новый комментарий' }}
+                    <textarea name="entry-text" [ngModel]="draft.text" (ngModelChange)="updateDiscussionDraft({text: $event})"
+                      maxlength="4000" rows="3" required></textarea>
+                  </label>
                 }
-              </article>
-            } @empty {
-              <p class="hint">Задач пока нет.</p>
-            }
-            @if (meeting.canManage) {
-              <form class="new-entry" (ngSubmit)="createAction()">
-                <label>Новая задача<textarea aria-label="Новая задача" name="new-action" [(ngModel)]="newActionText" maxlength="4000" rows="3" required></textarea></label>
-                <label>Исполнитель
-                  <select aria-label="Исполнитель новой задачи" name="new-action-assignee" [(ngModel)]="newActionAssignee">
-                    <option value="">Без исполнителя</option>
-                    @for (participant of availableAssignees(); track participant.id) {
-                      <option [value]="participant.id">{{ participant.displayName }}</option>
-                    }
-                  </select>
-                </label>
-                <button tuiButton type="submit" size="s" [disabled]="!newActionText().trim() || commandsBlocked()">Добавить задачу</button>
+                <button tuiButton type="submit" size="s" [disabled]="!draft.text.trim() || commandsBlocked()">
+                  {{ discussionAddLabels[kind] }}
+                </button>
               </form>
-            }
-          </section>
-        } @else if (discussion.queue.length > 0) {
-          <section>
-            <h2>Очередь завершена</h2>
-            <p>Можно выбрать любую тему из рейтинга и изменить её отметку.</p>
-          </section>
-        }
+            </section>
+          } @else if (discussion.queue.length > 0) {
+            <section class="discussion-workspace"><p>Выберите тему из списка.</p></section>
+          }
+        </div>
       }
+
+      <ng-template #topicResults let-topic>
+        @let records = discussionEntriesByTopic().get(topic.id)?.length ?? 0;
+        <div class="topic-results">
+          @if (discussionStatusByTopic().get(topic.id) !== 'discussed') {
+            <span class="visually-hidden">Не обсуждена</span>
+          }
+          <span class="topic-votes">
+            <span class="visually-hidden">Всего голосов: </span>{{ topic.totalVotes }}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 12h16v8H4zm3 0V5h10v7m-8-3 2 2 4-4" />
+            </svg>
+          </span>
+          <button tuiButton type="button" appearance="flat" size="s" aria-haspopup="dialog"
+            [attr.aria-label]="'Записи обсуждения: ' + topicTitle(topic) + ', ' + records"
+            (click)="openResultTopic(topic.id, resultsPanel)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 4h16v12H9l-5 4zM8 8h8m-8 4h5" />
+            </svg>
+            {{ records }}
+          </button>
+        </div>
+      </ng-template>
 
       @if (meeting.phase === 'Draft') {
         @if (meeting.canManage) {
@@ -433,7 +466,6 @@
               [(columns)]="columns"
               [(anonymousCards)]="anonymousCards"
               [(privateCollection)]="privateCollection"
-              [(anonymousVotes)]="anonymousVotes"
               [(voteSettings)]="voteSettings"
               [(votingEnabled)]="votingEnabled"
               [busy]="commandsBlocked()"
@@ -465,8 +497,8 @@
             <p>Настройки изменяет только фасилитатор.</p>
           </section>
         }
-      } @else {
-        <section class="board-section" [class.collect-board]="meeting.phase === 'Collect'" [class.grouping-board]="meeting.phase === 'Group' || meeting.phase === 'Vote'">
+      } @else if (meeting.phase !== 'Discuss') {
+        <section class="board-section" [class.results-board]="meeting.phase === 'Closed'" [class.collect-board]="meeting.phase === 'Collect'" [class.grouping-board]="meeting.phase === 'Group' || meeting.phase === 'Vote' || meeting.phase === 'Closed'">
           @if (meeting.phase === 'Group' && meeting.canManage && !meeting.integrations.ai) {
             <p class="hint">Внутренний ИИ отключён. Ручная группировка доступна.</p>
           }
@@ -509,7 +541,10 @@
                   @let groupCards = cardsForGroup(group.id);
                   @let canCollapse = meeting.phase === 'Group' || meeting.phase === 'Vote';
                   @let expanded = !canCollapse || expandedGroups().has(group.id);
-                  <article class="card-group" [class.drag-target]="isDropTarget('group', group.id)"
+                  @let topic = topicsBySource().get(group.id);
+                  <article class="card-group"
+                    [class.undiscussed-topic]="meeting.phase === 'Closed' && topic && discussionStatusByTopic().get(topic.id) !== 'discussed'"
+                    [class.drag-target]="isDropTarget('group', group.id)"
                     (dragover)="meeting.phase === 'Group' ? allowDrop($event, 'group', group.id) : null"
                     (drop)="meeting.phase === 'Group' ? drop($event, 'group', group.id) : null">
                     @if (meeting.phase === 'Group' && editingGroupId() === group.id) {
@@ -571,17 +606,21 @@
                         @if (expanded) { Свернуть } @else { Ещё {{ groupCards.length - 1 }} }
                       </button>
                     }
-                    @if (meeting.phase === 'Vote' && voteTopicsBySource().get(group.id); as topic) {
+                    @if (meeting.phase === 'Vote' && topic) {
                       <app-meeting-topic-votes [topic]="topic" [topicLabel]="group.name"
                         [remaining]="meeting.voting?.remaining ?? 0" [disabled]="commandsBlocked()"
                         (adjust)="changeVotes(topic, $event)" />
+                    } @else if (meeting.phase === 'Closed' && topic) {
+                      <ng-container *ngTemplateOutlet="topicResults; context: { $implicit: topic }" />
                     }
                   </article>
                 }
                 @for (card of cardsForColumn(column.id); track card.id) {
+                  @let topic = topicsBySource().get(card.id);
                   <article
                     class="card"
                     [class.hidden-card]="card.isHidden"
+                    [class.undiscussed-topic]="meeting.phase === 'Closed' && topic && discussionStatusByTopic().get(topic.id) !== 'discussed'"
                     [class.drag-target]="isDropTarget('card', card.id)"
                     [style.--card-color]="card.originalColumnColor ?? column.color"
                     [draggable]="meeting.phase === 'Group' && !commandsBlocked()"
@@ -619,10 +658,12 @@
                         <button tuiButton type="button" size="s" appearance="secondary" (click)="deleteCard(card)" [disabled]="commandsBlocked()">Удалить карточку</button>
                       </div>
                     }
-                    @if (meeting.phase === 'Vote' && voteTopicsBySource().get(card.id); as topic) {
+                    @if (meeting.phase === 'Vote' && topic) {
                       <app-meeting-topic-votes [topic]="topic" [topicLabel]="card.text ?? 'Карточка'"
                         [remaining]="meeting.voting?.remaining ?? 0" [disabled]="commandsBlocked()"
                         (adjust)="changeVotes(topic, $event)" />
+                    } @else if (meeting.phase === 'Closed' && topic) {
+                      <ng-container *ngTemplateOutlet="topicResults; context: { $implicit: topic }" />
                     }
                   </article>
                 }
@@ -674,6 +715,32 @@
             }
           </div>
         </section>
+      }
+
+      @if (meeting.phase === 'Closed') {
+        @if (meeting.totals; as totals) {
+          <p class="closed-summary hint">
+            Завершена {{ formatClosedAt(totals.closedAtUtc) }} UTC.
+            Участников: {{ totals.participantCount }}. Карточек: {{ totals.cardCount }}.
+            Тем: {{ totals.topicCount }}. Голосов: {{ totals.voteCount }}.
+          </p>
+        }
+        @if (closedExportableActions(); as actions) {
+          @if (actions.length) {
+            <details class="closed-export">
+              <summary>Экспорт задач</summary>
+              <ul>
+                @for (action of actions; track action.id) {
+                  <li>
+                    <span>{{ action.text }}</span>
+                    <button tuiButton type="button" size="s" appearance="secondary"
+                      (click)="exportAction(action)" [disabled]="commandsBlocked()">Экспортировать в mock Jira</button>
+                  </li>
+                }
+              </ul>
+            </details>
+          }
+        }
       }
 
     } @else {

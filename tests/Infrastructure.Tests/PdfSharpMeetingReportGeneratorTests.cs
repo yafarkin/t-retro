@@ -17,7 +17,6 @@ public sealed class PdfSharpMeetingReportGeneratorTests
             MeetingPhase.Discuss,
             true,
             true,
-            true,
             VoteBudgetSettings.Default,
             0,
             null,

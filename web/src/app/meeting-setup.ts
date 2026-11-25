@@ -6,13 +6,12 @@ import { copyEditableColumns, EditableColumn, MeetingSettingsPayload, VoteSettin
 import { hasTemplateColumnErrors } from './template-validation';
 
 export type MeetingSetupOptions = Pick<MeetingSettingsPayload,
-  'anonymousCards' | 'privateCollection' | 'anonymousVotes' | 'voteSettings'> & { votingEnabled: boolean };
+  'anonymousCards' | 'privateCollection' | 'voteSettings'> & { votingEnabled: boolean };
 
 export function initialMeetingOptions(): MeetingSetupOptions {
   return {
     anonymousCards: true,
     privateCollection: true,
-    anonymousVotes: true,
     votingEnabled: true,
     voteSettings: { mode: 'fixed', fixed: 6, percent: 5, minimum: 2 },
   };

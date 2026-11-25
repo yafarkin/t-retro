@@ -1,5 +1,6 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { afterNextRender, Component, computed, DestroyRef, effect, ElementRef, inject, Injector, signal, TemplateRef, viewChild } from '@angular/core';
+import { afterNextRender, Component, computed, DestroyRef, effect, ElementRef, inject, Injector, linkedSignal, signal, TemplateRef, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { Observable } from 'rxjs';
@@ -45,9 +46,25 @@ interface BoardTarget {
   id: string;
 }
 
+type DiscussionEntryKind = 'comments' | 'decisions' | 'actions';
+
+type DiscussionEntry =
+  | { kind: 'comments'; entry: TopicComment }
+  | { kind: 'decisions'; entry: TopicDecision }
+  | { kind: 'actions'; entry: ActionItem };
+
+interface DiscussionDraft {
+  kind: DiscussionEntryKind;
+  text: string;
+  description: string;
+  assignee: string;
+}
+
+const EMPTY_DISCUSSION_DRAFT: DiscussionDraft = { kind: 'comments', text: '', description: '', assignee: '' };
+
 @Component({
   selector: 'app-meeting-settings-page',
-  imports: [FormsModule, MeetingForm, MeetingInvite, MeetingTimerControls, MeetingTopicVotes, TuiButton],
+  imports: [FormsModule, NgTemplateOutlet, MeetingForm, MeetingInvite, MeetingTimerControls, MeetingTopicVotes, TuiButton],
   providers: [MeetingSyncService],
   templateUrl: './meeting-settings-page.html',
   styleUrls: [
@@ -57,6 +74,8 @@ interface BoardTarget {
     './meeting-toolbar.scss',
     './meeting-voting.scss',
     './meeting-dialog.scss',
+    './meeting-discussion.scss',
+    './meeting-results.scss',
     './meeting-participants.scss',
   ],
 })
@@ -85,7 +104,7 @@ export class MeetingSettingsPage {
     const budget = this.voteBudgetDraft();
     return budget !== null && Number.isInteger(budget) && budget >= 1 && budget <= 2147483647;
   });
-  readonly voteTopicsBySource = computed(() => new Map(this.state()?.topics.map((topic) => [topic.sourceId, topic])));
+  readonly topicsBySource = computed(() => new Map(this.state()?.topics.map((topic) => [topic.sourceId, topic])));
   readonly selectedTemplate = signal('');
   readonly selectedMember = signal('');
   readonly participantError = signal<string | null>(null);
@@ -105,13 +124,66 @@ export class MeetingSettingsPage {
     const card = source?.kind === 'card' ? this.state()?.cards.find((item) => item.id === source.id) : undefined;
     return card?.groupId === null ? card.columnId : null;
   });
-  readonly newCommentText = signal('');
-  readonly newDecisionText = signal('');
-  readonly newActionText = signal('');
-  readonly newActionAssignee = signal('');
-  readonly editingEntryKind = signal<'comments' | 'decisions' | 'actions' | null>(null);
+  private readonly sharedDiscussionTopic = computed(() => ({
+    id: this.state()?.discussion?.currentTopicId ?? null,
+    version: this.state()?.discussion?.selectionVersion ?? 0,
+    canManage: this.state()?.canManage ?? false,
+  }), { equal: (a, b) => a.id === b.id && a.version === b.version && a.canManage === b.canManage });
+  private readonly viewedTopicId = linkedSignal(() => this.sharedDiscussionTopic().id);
+  private readonly discussionDrafts = signal<Record<string, DiscussionDraft>>({});
+  readonly discussionDraft = computed(() => {
+    const topicId = this.viewedTopicId();
+    return (topicId && this.discussionDrafts()[topicId]) || EMPTY_DISCUSSION_DRAFT;
+  });
+  readonly currentDiscussionItem = computed(() =>
+    this.state()?.discussion?.queue.find((item) => item.topicId === this.viewedTopicId()));
+  readonly hasNextDiscussionTopic = computed(() => {
+    const item = this.currentDiscussionItem();
+    const discussion = this.state()?.discussion;
+    return !!item && !!discussion && item.position + 1 < discussion.queue.length;
+  });
+  readonly resultTopicId = signal<string | null>(null);
+  readonly resultTopic = computed(() => {
+    const id = this.resultTopicId();
+    return id ? this.discussionTopic(id) : undefined;
+  });
+  readonly discussionStatusByTopic = computed(() =>
+    new Map(this.state()?.discussion?.queue.map((item) => [item.topicId, item.status])));
+  readonly discussionEntriesByTopic = computed(() => {
+    const discussion = this.state()?.discussion;
+    const byTopic = new Map<string, DiscussionEntry[]>();
+    if (!discussion) {
+      return byTopic;
+    }
+    const entries: DiscussionEntry[] = [
+      ...discussion.comments.map((entry) => ({ kind: 'comments' as const, entry })),
+      ...discussion.decisions.map((entry) => ({ kind: 'decisions' as const, entry })),
+      ...discussion.actions.map((entry) => ({ kind: 'actions' as const, entry })),
+    ];
+    for (const entry of entries) {
+      const topicId = entry.entry.topicId;
+      const topicEntries = byTopic.get(topicId);
+      if (topicEntries) {
+        topicEntries.push(entry);
+      } else {
+        byTopic.set(topicId, [entry]);
+      }
+    }
+    for (const topicEntries of byTopic.values()) {
+      topicEntries.sort((a, b) => (a.entry.createdVersion ?? 0) - (b.entry.createdVersion ?? 0));
+    }
+    return byTopic;
+  });
+  readonly discussionEntries = computed(() => this.discussionEntriesByTopic().get(this.viewedTopicId() ?? '') ?? []);
+  readonly closedExportableActions = computed(() => (this.state()?.discussion?.actions ?? [])
+    .filter((action) => this.canExport(action)));
+  private readonly discussionEntryLabels = { comments: 'Комментарий', decisions: 'Решение', actions: 'Задача' };
+  readonly discussionSaveLabels = { comments: 'Сохранить комментарий', decisions: 'Сохранить решение', actions: 'Сохранить задачу' };
+  readonly discussionAddLabels = { comments: 'Добавить комментарий', decisions: 'Добавить решение', actions: 'Добавить задачу' };
+  readonly editingEntryKind = signal<DiscussionEntryKind | null>(null);
   readonly editingEntryId = signal<string | null>(null);
   readonly editingEntryText = signal('');
+  readonly editingActionDescription = signal('');
   readonly editingActionAssignee = signal('');
   readonly participants = computed(() => {
     const meeting = this.state();
@@ -144,7 +216,6 @@ export class MeetingSettingsPage {
   readonly columns = signal(defaultColumns());
   readonly anonymousCards = signal(true);
   readonly privateCollection = signal(true);
-  readonly anonymousVotes = signal(true);
   readonly voteSettings = signal(defaultVoteSettings());
   readonly votingEnabled = signal(true);
   private formVersion = 0;
@@ -381,13 +452,11 @@ export class MeetingSettingsPage {
     if (!current?.canManage || current.phase === 'Closed' || this.commandsBlocked()) {
       return;
     }
-    if (current.readiness && current.readiness.readyCount < current.readiness.totalCount) {
+    const readiness = current.readiness;
+    if (current.phase === 'Discuss' || (readiness && readiness.readyCount < readiness.totalCount)) {
       this.pendingAdvancePhase = current.phase;
       dialog.returnValue = '';
       dialog.showModal();
-      return;
-    }
-    if (current.phase === 'Discuss' && !window.confirm('Завершить ретро?')) {
       return;
     }
     this.advance(current);
@@ -604,7 +673,7 @@ export class MeetingSettingsPage {
 
   currentTopic(): MeetingTopic | undefined {
     const current = this.state();
-    return current?.topics.find((topic) => topic.id === current.discussion?.currentTopicId);
+    return current?.topics.find((topic) => topic.id === this.viewedTopicId());
   }
 
   discussionTopic(topicId: string): MeetingTopic | undefined {
@@ -624,19 +693,26 @@ export class MeetingSettingsPage {
 
   selectDiscussionTopic(topicId: string): void {
     const current = this.state();
-    if (!current || this.commandsBlocked()) {
+    if (!current || current.phase !== 'Discuss') {
       return;
     }
-    this.executeDiscussionCommand(this.meetings.selectCurrentTopic(this.meetingId, topicId, current.version));
+    if (!current.canManage) {
+      this.viewedTopicId.set(topicId);
+      return;
+    }
+    if (this.commandsBlocked()) {
+      return;
+    }
+    this.executeMeetingCommand(this.meetings.selectCurrentTopic(this.meetingId, topicId, current.version));
   }
 
   setDiscussionStatus(status: DiscussionStatus, advance: boolean): void {
     const current = this.state();
     const topic = this.currentTopic();
-    if (!current || !topic || this.commandsBlocked()) {
+    if (!current?.canManage || !topic || this.commandsBlocked() || (advance && !this.hasNextDiscussionTopic())) {
       return;
     }
-    this.executeDiscussionCommand(
+    this.executeMeetingCommand(
       this.meetings.setTopicStatus(this.meetingId, topic.id, status, advance, current.version),
     );
   }
@@ -650,82 +726,57 @@ export class MeetingSettingsPage {
     return labels[status];
   }
 
-  createComment(): void {
+  updateDiscussionDraft(change: Partial<DiscussionDraft>): void {
+    const topicId = this.viewedTopicId();
+    if (topicId) {
+      this.discussionDrafts.update((drafts) => ({
+        ...drafts,
+        [topicId]: { ...this.discussionDraft(), ...change },
+      }));
+    }
+  }
+
+  addDiscussionEntry(): void {
     const current = this.state();
-    const topic = this.currentTopic();
-    const text = this.newCommentText().trim();
-    if (!current || !topic || !text || this.commandsBlocked()) {
+    const topicId = this.viewedTopicId();
+    const draft = this.discussionDraft();
+    const text = draft.text.trim();
+    if (current?.phase !== 'Discuss' || !topicId || !text || this.commandsBlocked()) {
       return;
     }
-    this.executeDiscussionCommand(
-      this.meetings.createComment(this.meetingId, topic.id, text, current.version),
-      () => this.newCommentText.set(''),
-    );
+
+    const kind = !current.canManage && draft.kind === 'decisions' ? 'comments' : draft.kind;
+    const command = kind === 'comments'
+      ? this.meetings.createComment(this.meetingId, topicId, text, current.version)
+      : kind === 'decisions'
+        ? this.meetings.createDecision(this.meetingId, topicId, text, current.version)
+        : this.meetings.createAction(
+          this.meetingId, topicId, text, draft.description.trim() || null, draft.assignee || null, current.version,
+        );
+    this.executeMeetingCommand(command, () => this.discussionDrafts.update((drafts) => {
+      if (drafts[topicId] !== draft) {
+        return drafts;
+      }
+      return { ...drafts, [topicId]: { ...EMPTY_DISCUSSION_DRAFT, kind } };
+    }));
   }
 
-  createDecision(): void {
+  discussionEntryLabel(kind: DiscussionEntryKind): string {
+    return this.discussionEntryLabels[kind];
+  }
+
+  openResultTopic(topicId: string, dialog: HTMLDialogElement): void {
+    this.resultTopicId.set(topicId);
+    dialog.showModal();
+  }
+
+  archiveMeeting(): void {
     const current = this.state();
-    const topic = this.currentTopic();
-    const text = this.newDecisionText().trim();
-    if (!current || !topic || !text || this.commandsBlocked()) {
+    if (!current?.canManage || current.isArchived || this.commandsBlocked()) {
       return;
     }
-    this.executeDiscussionCommand(
-      this.meetings.createDecision(this.meetingId, topic.id, text, current.version),
-      () => this.newDecisionText.set(''),
-    );
-  }
 
-  createAction(): void {
-    const current = this.state();
-    const topic = this.currentTopic();
-    const text = this.newActionText().trim();
-    if (!current || !topic || !text || this.commandsBlocked()) {
-      return;
-    }
-    this.executeDiscussionCommand(
-      this.meetings.createAction(
-        this.meetingId,
-        topic.id,
-        text,
-        this.newActionAssignee() || null,
-        current.version,
-      ),
-      () => {
-        this.newActionText.set('');
-        this.newActionAssignee.set('');
-      },
-    );
-  }
-
-  currentComments(): TopicComment[] {
-    const current = this.state();
-    const topic = this.currentTopic();
-    return current?.discussion?.comments.filter((comment) => comment.topicId === topic?.id) ?? [];
-  }
-
-  currentDecisions(): TopicDecision[] {
-    const current = this.state();
-    const topic = this.currentTopic();
-    return current?.discussion?.decisions.filter((decision) => decision.topicId === topic?.id) ?? [];
-  }
-
-  currentActions(): ActionItem[] {
-    const current = this.state();
-    const topic = this.currentTopic();
-    return current?.discussion?.actions.filter((action) => action.topicId === topic?.id) ?? [];
-  }
-
-  commentsForTopic(topicId: string): TopicComment[] {
-    return this.state()?.discussion?.comments.filter((comment) => comment.topicId === topicId) ?? [];
-  }
-
-  decisionsForTopic(topicId: string): TopicDecision[] {
-    return this.state()?.discussion?.decisions.filter((decision) => decision.topicId === topicId) ?? [];
-  }
-
-  actionsForTopic(topicId: string): ActionItem[] {
-    return this.state()?.discussion?.actions.filter((action) => action.topicId === topicId) ?? [];
+    this.executeMeetingCommand(this.meetings.archive(this.meetingId, current.version));
   }
 
   formatClosedAt(value: string): string {
@@ -737,12 +788,13 @@ export class MeetingSettingsPage {
   }
 
   startEntryEdit(
-    kind: 'comments' | 'decisions' | 'actions',
+    kind: DiscussionEntryKind,
     entry: TopicComment | TopicDecision | ActionItem,
   ): void {
     this.editingEntryKind.set(kind);
     this.editingEntryId.set(entry.id);
     this.editingEntryText.set(entry.text);
+    this.editingActionDescription.set('description' in entry ? entry.description ?? '' : '');
     this.editingActionAssignee.set('assigneeId' in entry ? entry.assigneeId ?? '' : '');
   }
 
@@ -750,6 +802,7 @@ export class MeetingSettingsPage {
     this.editingEntryKind.set(null);
     this.editingEntryId.set(null);
     this.editingEntryText.set('');
+    this.editingActionDescription.set('');
     this.editingActionAssignee.set('');
   }
 
@@ -773,13 +826,14 @@ export class MeetingSettingsPage {
           this.meetingId,
           entryId,
           text,
+          this.editingActionDescription().trim() || null,
           this.editingActionAssignee() || null,
           current.version,
         );
-    this.executeDiscussionCommand(command, () => this.cancelEntryEdit());
+    this.executeMeetingCommand(command, () => this.cancelEntryEdit());
   }
 
-  deleteEntry(kind: 'comments' | 'decisions' | 'actions', entryId: string): void {
+  deleteEntry(kind: DiscussionEntryKind, entryId: string): void {
     const current = this.state();
     if (!current || this.commandsBlocked() || !window.confirm('Удалить запись?')) {
       return;
@@ -789,7 +843,7 @@ export class MeetingSettingsPage {
       : kind === 'decisions'
         ? this.meetings.deleteDecision(this.meetingId, entryId, current.version)
         : this.meetings.deleteAction(this.meetingId, entryId, current.version);
-    this.executeDiscussionCommand(command);
+    this.executeMeetingCommand(command);
   }
 
   availableAssignees(currentAssigneeId: string | null = null) {
@@ -820,7 +874,7 @@ export class MeetingSettingsPage {
     if (!this.canExport(action) || this.commandsBlocked()) {
       return;
     }
-    this.executeDiscussionCommand(this.meetings.exportAction(this.meetingId, action.id));
+    this.executeMeetingCommand(this.meetings.exportAction(this.meetingId, action.id));
   }
 
   exportStatusLabel(status: string): string {
@@ -835,7 +889,7 @@ export class MeetingSettingsPage {
     return labels[status] ?? status;
   }
 
-  private executeDiscussionCommand(
+  private executeMeetingCommand(
     command: ReturnType<MeetingService['updateComment']>,
     after?: () => void,
   ): void {
@@ -887,7 +941,7 @@ export class MeetingSettingsPage {
 
   changeVotes(topic: MeetingState['topics'][number], change: number): void {
     const current = this.state();
-    if (!current?.voting || this.commandsBlocked()) {
+    if (!current?.voting || topic.myVotes === undefined || this.commandsBlocked()) {
       return;
     }
     const count = topic.myVotes + change;
@@ -983,7 +1037,6 @@ export class MeetingSettingsPage {
     this.columns.set(copyEditableColumns(state.columns));
     this.anonymousCards.set(state.anonymousCards);
     this.privateCollection.set(state.privateCollection);
-    this.anonymousVotes.set(state.anonymousVotes);
     this.voteSettings.set({ ...state.voteSettings });
     this.votingEnabled.set(state.votingEnabled !== false);
   }
@@ -994,7 +1047,6 @@ export class MeetingSettingsPage {
       columns: this.columns(),
       anonymousCards: this.anonymousCards(),
       privateCollection: this.privateCollection(),
-      anonymousVotes: this.anonymousVotes(),
       voteSettings: this.voteSettings(),
       votingEnabled: this.votingEnabled(),
     };

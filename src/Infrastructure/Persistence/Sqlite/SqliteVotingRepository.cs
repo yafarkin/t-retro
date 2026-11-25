@@ -12,7 +12,6 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
         Guid topicId,
         int count,
         int expectedBallotVersion,
-        DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
@@ -146,29 +145,10 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
             return new VotingCommandResult(VotingCommandStatus.VersionConflict);
         }
 
-        var newVersion = state.Version + 1;
-        var meetingUpdated = await connection.ExecuteAsync(
-            """
-            UPDATE meetings SET version = @NewVersion, updated_at_utc = @Now
-            WHERE id = @MeetingId AND phase = 'Vote' AND version = @ExpectedVersion;
-            """,
-            new
-            {
-                MeetingId = meetingId.ToString(),
-                NewVersion = newVersion,
-                ExpectedVersion = state.Version,
-                Now = nowUtc.ToString("O"),
-            },
-            transaction);
-        if (meetingUpdated == 0)
-        {
-            return new VotingCommandResult(VotingCommandStatus.VersionConflict);
-        }
-
         await transaction.CommitAsync(cancellationToken);
         return new VotingCommandResult(
             VotingCommandStatus.Success,
-            newVersion,
+            state.Version,
             newBallotVersion,
             budget - (spent - currentCount + count));
     }
@@ -232,8 +212,7 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
         {
             return new VotingCommandResult(
                 VotingCommandStatus.BudgetTooLow,
-                state.Version,
-                MinimumBudget: minimumBudget);
+                state.Version);
         }
 
         var current = MapSettings(state);

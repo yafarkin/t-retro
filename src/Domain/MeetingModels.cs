@@ -70,7 +70,6 @@ public sealed record Meeting(
     MeetingPhase Phase,
     bool AnonymousCards,
     bool PrivateCollection,
-    bool AnonymousVotes,
     VoteBudgetSettings VoteSettings,
     int? InitialCardCount,
     Guid? FacilitatorId,
@@ -79,7 +78,8 @@ public sealed record Meeting(
     int BoardVersion,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc,
-    bool VotingEnabled = true);
+    bool VotingEnabled = true,
+    DateTimeOffset? ArchivedAtUtc = null);
 
 public sealed record MeetingColumn(Guid Id, Guid MeetingId, string Name, string Color, int Position, string? Description = null);
 

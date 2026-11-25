@@ -28,7 +28,6 @@ public sealed class MeetingService(
             startCollecting ? MeetingPhase.Collect : MeetingPhase.Draft,
             privacy.AnonymousCards,
             privacy.PrivateCollection,
-            privacy.AnonymousVotes,
             ParseVoteSettings(voteMode, votePercent, voteMinimum, fixedBudget),
             null,
             userId,
@@ -54,8 +53,29 @@ public sealed class MeetingService(
 
     public Task<IReadOnlyList<MeetingSummary>> ListAsync(
         Guid userId,
+        bool archived,
         CancellationToken cancellationToken) =>
-        meetings.ListForUserAsync(userId, cancellationToken);
+        meetings.ListForUserAsync(userId, archived, cancellationToken);
+
+    public async Task<int> ArchiveAsync(
+        Guid userId,
+        Guid meetingId,
+        int expectedVersion,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = await access.GetAsync(userId, meetingId, true, cancellationToken);
+        var meeting = snapshot.Meeting;
+        if (meeting.ArchivedAtUtc is not null)
+        {
+            return meeting.Version;
+        }
+
+        var version = await meetings.ArchiveAsync(
+            meetingId, userId, expectedVersion, DateTimeOffset.UtcNow, cancellationToken)
+            ?? throw new ConflictException("VersionConflict", "Состояние изменилось. Обновите данные и повторите действие.");
+        await notifier.StateChangedAsync(meetingId, version, cancellationToken);
+        return version;
+    }
 
     public async Task<MeetingSnapshot> UpdateDraftAsync(
         Guid userId,
@@ -82,7 +102,6 @@ public sealed class MeetingService(
             Name = RequiredText.Create(name, 120),
             AnonymousCards = privacy.AnonymousCards,
             PrivateCollection = privacy.PrivateCollection,
-            AnonymousVotes = privacy.AnonymousVotes,
             VoteSettings = ParseVoteSettings(voteMode, votePercent, voteMinimum, fixedBudget),
             VotingEnabled = votingEnabled ?? current.Meeting.VotingEnabled,
             Version = current.Meeting.Version + 1,

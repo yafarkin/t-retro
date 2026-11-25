@@ -19,6 +19,14 @@ export class MeetingService {
     return this.http.get<MeetingSummary[]>('/api/meetings');
   }
 
+  listArchived(): Observable<MeetingSummary[]> {
+    return this.http.get<MeetingSummary[]>('/api/meetings/archive');
+  }
+
+  archive(id: string, expectedVersion: number): Observable<{ version: number }> {
+    return this.http.put<{ version: number }>(`/api/meetings/${id}/archive`, { expectedVersion });
+  }
+
   create(payload: CreateMeetingPayload): Observable<{ id: string; version: number }> {
     return this.http.post<{ id: string; version: number }>('/api/meetings', payload);
   }
@@ -160,20 +168,22 @@ export class MeetingService {
     meetingId: string,
     topicId: string,
     text: string,
+    description: string | null,
     assigneeId: string | null,
     expectedVersion: number,
   ): Observable<{ id: string; version: number }> {
-    return this.createDiscussionEntry(meetingId, topicId, 'actions', { text, assigneeId, expectedVersion });
+    return this.createDiscussionEntry(meetingId, topicId, 'actions', { text, description, assigneeId, expectedVersion });
   }
 
   updateAction(
     meetingId: string,
     actionId: string,
     text: string,
+    description: string | null,
     assigneeId: string | null,
     expectedVersion: number,
   ): Observable<{ version: number }> {
-    return this.updateDiscussionEntry(meetingId, 'actions', actionId, { text, assigneeId, expectedVersion });
+    return this.updateDiscussionEntry(meetingId, 'actions', actionId, { text, description, assigneeId, expectedVersion });
   }
 
   deleteAction(meetingId: string, actionId: string, expectedVersion: number): Observable<{ version: number }> {
