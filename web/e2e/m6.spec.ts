@@ -73,12 +73,12 @@ test('M6 ranked queue, shared navigation, decisions, comments and actions work i
   const workspaceBox = (await secondWorkspace.boundingBox())!;
   expect(agendaBox.x + agendaBox.width).toBeLessThan(workspaceBox.x);
 
-  await first.getByRole('button', { name: 'Далее', exact: true }).click();
+  await first.getByRole('button', { name: 'Пропуск', exact: true }).click();
   await expect(secondWorkspace.getByRole('heading', { name: 'Тема B', exact: true })).toBeVisible();
-  await expect(secondQueue.nth(0)).toHaveClass(/discussed-topic/);
-  await expect(secondQueue.nth(0)).toContainText('Обсуждена');
+  await expect(secondQueue.nth(0)).toContainText('Пропущена');
   await expect(second.getByRole('button', { name: 'Решение', exact: true })).toHaveCount(0);
   await expect(second.getByRole('button', { name: 'Далее', exact: true })).toHaveCount(0);
+  await expect(second.getByRole('button', { name: 'Пропуск', exact: true })).toHaveCount(0);
 
   await secondQueue.nth(2).click();
   await expect(secondWorkspace.getByRole('heading', { name: 'Тема C', exact: true })).toBeVisible();
@@ -121,14 +121,20 @@ test('M6 ranked queue, shared navigation, decisions, comments and actions work i
 
   await first.getByRole('button', { name: 'Далее', exact: true }).click();
   await expect(secondWorkspace.getByRole('heading', { name: 'Тема C', exact: true })).toBeVisible();
+  await expect(secondQueue.nth(1)).toHaveClass(/discussed-topic/);
   await expect(second.getByLabel('Новый комментарий')).toHaveValue('Черновик для темы C');
   await expect(secondWorkspace.getByText('Комментарий участника', { exact: true })).toHaveCount(0);
   await expect(first.getByRole('button', { name: 'Далее', exact: true })).toBeDisabled();
+  await first.getByRole('button', { name: 'Пропуск', exact: true }).click();
+  await expect(secondQueue.nth(2)).toContainText('Пропущена');
+  await expect(secondQueue.nth(2)).toHaveAttribute('aria-current', 'true');
 
   await first.getByRole('button', { name: 'Выбрать тему: Тема A' }).click();
   await expect(secondWorkspace.getByRole('heading', { name: 'Тема A', exact: true })).toBeVisible();
   await expect(secondQueue.nth(0)).toHaveAttribute('aria-current', 'true');
-  await expect(secondQueue.nth(0)).toHaveClass(/discussed-topic/);
+  await expect(secondQueue.nth(0)).toContainText('Пропущена');
+  await first.getByRole('button', { name: 'Снять отметку', exact: true }).click();
+  await expect(secondQueue.nth(0)).not.toContainText('Пропущена');
 
   await first.getByRole('button', { name: 'Выбрать тему: Тема B' }).click();
   await expect(secondWorkspace.getByText('Обновлённое описание', { exact: true })).toBeVisible();

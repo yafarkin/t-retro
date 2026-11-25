@@ -1,0 +1,14 @@
+.git
+.tools
+**/.DS_Store
+**/.env
+**/.env.*
+**/bin
+**/obj
+**/data/*.db
+**/data/*.db-*
+**/node_modules
+**/dist
+**/.angular
+**/test-results
+**/playwright-report

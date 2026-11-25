@@ -14,6 +14,8 @@ export class MeetingSyncService implements OnDestroy {
   private refreshing = false;
   private refreshAgain = false;
   private clockOffset = 0;
+  private connectionGeneration = 0;
+  private subscribed = false;
 
   readonly snapshot = signal<MeetingState | null>(null);
   readonly revoked = signal(false);
@@ -58,27 +60,23 @@ export class MeetingSyncService implements OnDestroy {
         this.expired.set({ runId, phase });
       }
     });
-    connection.onreconnecting(() => this.connectionState.set('reconnecting'));
+    connection.onreconnecting(() => this.invalidateConnection('reconnecting'));
     connection.onreconnected(async () => {
       try {
-        await connection.invoke('Subscribe', this.meetingId);
-        this.connectionState.set('connected');
-        await this.refresh();
+        await this.subscribe(connection);
       } catch {
-        this.connectionState.set('reconnecting');
+        // Keep editing locked if the subscription could not be restored.
       }
     });
-    connection.onclose(() => this.connectionState.set('disconnected'));
+    connection.onclose(() => this.invalidateConnection('disconnected'));
 
     await connection.start();
-    await connection.invoke('Subscribe', meetingId);
-    this.connectionState.set('connected');
-    await this.refresh();
+    await this.subscribe(connection);
     this.pollTimer = setInterval(() => void this.refresh(), 15_000);
     this.clockTimer = setInterval(() => this.now.set(Date.now()), 1000);
   }
 
-  replaceSnapshot(snapshot: MeetingState): void {
+  replaceSnapshot(snapshot: MeetingState): boolean {
     const current = this.snapshot();
     if (!current || snapshot.version >= current.version) {
       const receivedAt = Date.now();
@@ -89,7 +87,10 @@ export class MeetingSyncService implements OnDestroy {
         this.expired.set(null);
       }
       this.snapshot.set(snapshot);
+      return true;
     }
+
+    return false;
   }
 
   dismissExpired(): void {
@@ -105,12 +106,23 @@ export class MeetingSyncService implements OnDestroy {
       return;
     }
 
+    const generation = this.connectionGeneration;
+    const subscribed = this.subscribed;
     this.refreshing = true;
     try {
       const snapshot = await firstValueFrom(this.meetings.state(this.meetingId));
-      this.replaceSnapshot(snapshot);
+      if (generation !== this.connectionGeneration || this.revoked()) {
+        return;
+      }
+      const accepted = this.replaceSnapshot(snapshot);
+      if (accepted && subscribed) {
+        this.connectionState.set('connected');
+      }
       this.error.set(null);
     } catch (error) {
+      if (generation !== this.connectionGeneration) {
+        return;
+      }
       const status = (error as { status?: number }).status;
       if (status === 403) {
         this.revoked.set(true);
@@ -148,6 +160,23 @@ export class MeetingSyncService implements OnDestroy {
     if (this.connection) {
       await this.connection.stop();
     }
+  }
+
+  private async subscribe(connection: HubConnection): Promise<void> {
+    const generation = this.connectionGeneration;
+    await connection.invoke('Subscribe', this.meetingId);
+    if (connection !== this.connection || generation !== this.connectionGeneration) {
+      return;
+    }
+
+    this.subscribed = true;
+    await this.refresh();
+  }
+
+  private invalidateConnection(state: 'reconnecting' | 'disconnected'): void {
+    this.connectionGeneration++;
+    this.subscribed = false;
+    this.connectionState.set(state);
   }
 
   private scheduleRefresh(meetingId: string): void {

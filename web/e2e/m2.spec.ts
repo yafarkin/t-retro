@@ -1,4 +1,4 @@
-import { expect, Page, test } from '@playwright/test';
+import { expect, Page, test, WebSocketRoute } from '@playwright/test';
 import { closeContextGracefully } from './helpers';
 
 async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
@@ -15,6 +15,10 @@ test('M2 presence, live state, role transfer and access revocation synchronize c
   const secondContext = await browser.newContext();
   const first = await firstContext.newPage();
   const second = await secondContext.newPage();
+  const sockets: { client: WebSocketRoute; server: WebSocketRoute }[] = [];
+  await first.routeWebSocket(/\/hubs\/retro\?/, (socket) => {
+    sockets.push({ client: socket, server: socket.connectToServer() });
+  });
 
   await login(first, origin, 'm2-first', 'Первый M2');
   await login(second, origin, 'm2-second', 'Второй M2');
@@ -56,6 +60,40 @@ test('M2 presence, live state, role transfer and access revocation synchronize c
   await first.getByLabel('Название встречи').fill('Ретро M2 после обновления');
   await first.getByRole('button', { name: 'Сохранить настройки' }).click();
   await expect(second.getByRole('heading', { name: 'Ретро M2 после обновления', exact: true })).toBeVisible();
+
+  const startCollection = first.getByRole('button', { name: 'Начать сбор', exact: true });
+  await expect(startCollection).toBeEnabled();
+  expect(sockets).toHaveLength(1);
+  const releaseSnapshot = Promise.withResolvers<void>();
+  const stateUrl = `**/api/meetings/${id}/state`;
+  let reconnectSnapshots = 0;
+  await first.route(stateUrl, async (route) => {
+    if (sockets.length > 1) {
+      reconnectSnapshots++;
+      if (reconnectSnapshots === 1) {
+        await route.fulfill({ status: 503, json: { code: 'TestUnavailable' } });
+        return;
+      }
+      await releaseSnapshot.promise;
+    }
+    await route.continue();
+  });
+  try {
+    const failedSnapshot = first.waitForResponse(
+      (response) => response.url().endsWith(`/api/meetings/${id}/state`) && response.status() === 503,
+      { timeout: 10_000 },
+    );
+    await Promise.all([sockets[0].client.close({ code: 1012 }), sockets[0].server.close({ code: 1012 })]);
+    await failedSnapshot;
+    await expect(startCollection).toBeDisabled();
+    await expect.poll(() => reconnectSnapshots, { timeout: 20_000 }).toBeGreaterThan(1);
+    await expect(first.getByText('Восстанавливаем соединение.', { exact: false })).toBeVisible();
+    await expect(startCollection).toBeDisabled();
+  } finally {
+    releaseSnapshot.resolve();
+  }
+  await expect(startCollection).toBeEnabled();
+  await first.unroute(stateUrl);
 
   await expect(first.getByRole('button', { name: 'Передать роль', exact: true })).toHaveCount(0);
   await first.getByRole('button', { name: 'Участники', exact: true }).click();

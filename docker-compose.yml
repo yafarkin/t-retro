@@ -1,0 +1,45 @@
+x-app: &app-image
+  image: t-retro:local
+  build: .
+  environment:
+    ASPNETCORE_ENVIRONMENT: Development
+    Database__Provider: SQLite
+    ConnectionStrings__Default: Data Source=/app/data/t-retro.db
+  volumes:
+    - sqlite-data:/app/data
+    - protection-keys:/home/app/.aspnet/DataProtection-Keys
+
+services:
+  app:
+    <<: *app-image
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  migrate:
+    <<: *app-image
+    command: ["--migrate"]
+    healthcheck:
+      disable: true
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: t_retro
+      POSTGRES_USER: t_retro
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env or the environment}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  sqlite-data:
+  protection-keys:
+  postgres-data:

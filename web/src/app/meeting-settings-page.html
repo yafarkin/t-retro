@@ -307,13 +307,15 @@
                 </div>
                 @if (meeting.canManage) {
                   <div class="discussion-navigation">
-                    @if (item?.status === 'discussed') {
+                    @if (item && item.status !== 'pending') {
                       <button tuiButton type="button" size="s" appearance="secondary" [disabled]="commandsBlocked()"
                         (click)="setDiscussionStatus('pending', false)">Снять отметку</button>
                     } @else {
                       <button tuiButton type="button" size="s" appearance="secondary" [disabled]="commandsBlocked()"
                         (click)="setDiscussionStatus('discussed', false)">Отметить обсуждённой</button>
                     }
+                    <button tuiButton type="button" size="s" appearance="secondary" [disabled]="commandsBlocked()"
+                      (click)="setDiscussionStatus('skipped', hasNextDiscussionTopic())">Пропуск</button>
                     <button tuiButton type="button" size="s" [disabled]="commandsBlocked() || !hasNextDiscussionTopic()"
                       (click)="setDiscussionStatus('discussed', true)">Далее</button>
                   </div>

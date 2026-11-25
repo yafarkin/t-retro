@@ -116,6 +116,12 @@ public sealed partial class Program
 
         var app = builder.Build();
         app.UseExceptionHandler();
+        var servesSpa = app.Environment.WebRootFileProvider.GetFileInfo("index.html").Exists;
+        if (servesSpa)
+        {
+            app.UseStaticFiles();
+        }
+
         if (isLocalEnvironment)
         {
             app.UseCors("DevSpa");
@@ -138,7 +144,19 @@ public sealed partial class Program
         app.MapTemplateEndpoints();
         app.MapMemberEndpoints();
         app.MapHub<RetroHub>("/hubs/retro");
-        app.MapGet("/", () => Results.Ok(new { Name = "T-Retro API" }));
+        if (servesSpa)
+        {
+            app.MapFallback("/api/{**path}", () => Results.NotFound());
+            app.MapFallback("/hubs/{**path}", () => Results.NotFound());
+            app.MapFallback("/health/{**path}", () => Results.NotFound());
+            app.MapFallback("/openapi/{**path}", () => Results.NotFound());
+            app.MapFallbackToFile("index.html");
+        }
+        else
+        {
+            app.MapGet("/", () => Results.Ok(new { Name = "T-Retro API" }));
+        }
+
         app.MapGet("/health/live", () => Results.Ok(new HealthResponse("ok"))).AllowAnonymous();
         app.MapGet("/health/startup", (StartupState state) =>
                 state.IsStarted
