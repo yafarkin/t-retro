@@ -1,8 +1,10 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import { TuiButton, TuiHint, TuiRoot } from '@taiga-ui/core';
 import { AuthService } from './auth.service';
 import { ConnectionService } from './connection.service';
+import { MeetingHeaderService } from './meeting-header.service';
 
 type ThemePreference = 'light' | 'dark' | 'system';
 const THEME_STORAGE_KEY = 't-retro.theme';
@@ -23,7 +25,7 @@ function readTheme(): ThemePreference {
 }
 
 @Component({
-  imports: [RouterLink, RouterOutlet, TuiButton, TuiHint, TuiRoot],
+  imports: [NgTemplateOutlet, RouterLink, RouterOutlet, TuiButton, TuiHint, TuiRoot],
   selector: 'app-root',
   styleUrl: './app.scss',
   templateUrl: './app.html',
@@ -34,6 +36,7 @@ export class App {
   private readonly systemDark = signal(this.systemTheme?.matches ?? false);
   readonly auth = inject(AuthService);
   readonly connection = inject(ConnectionService);
+  readonly meetingHeader = inject(MeetingHeaderService);
   readonly theme = signal<ThemePreference>(readTheme());
   readonly themeHint = computed(() => THEME_LABEL[this.theme()]);
   readonly resolvedTheme = computed(() => {

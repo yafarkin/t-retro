@@ -5,6 +5,12 @@
         <img src="retro-shield.svg" width="34" height="34" alt="" />
         <strong aria-hidden="true">РЕТРО</strong>
       </a>
+      @if (meetingHeader.title(); as title) {
+        <div class="meeting-heading">
+          <h1 class="meeting-title" id="meeting-title">{{ title }}</h1>
+          <ng-container [ngTemplateOutlet]="meetingHeader.invite()" />
+        </div>
+      }
       <div class="controls">
         <button class="icon-button" tuiButton type="button" appearance="secondary" size="s"
           [attr.aria-label]="themeHint()" [tuiHint]="themeHint()" (click)="cycleTheme()">

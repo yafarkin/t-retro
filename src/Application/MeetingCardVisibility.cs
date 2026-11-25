@@ -20,6 +20,7 @@ public static class MeetingCardVisibility
             isMine,
             !showText,
             data.Card.Version,
-            data.Card.GroupId);
+            data.Card.GroupId,
+            showText ? data.OriginalColumnColor : null);
     }
 }

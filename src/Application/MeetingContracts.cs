@@ -11,7 +11,8 @@ public sealed record MeetingParticipant(
     string Subject,
     string DisplayName,
     MemberStatus Status,
-    bool IsOnline = false);
+    bool IsOnline = false,
+    bool IsReady = false);
 
 public sealed record MeetingStateData(
     Meeting Meeting,

@@ -36,7 +36,8 @@ public static class ApiMappings
                 participant.Subject,
                 participant.DisplayName,
                 participant.Status.ToString(),
-                participant.IsOnline)).ToArray(),
+                participant.IsOnline,
+                participant.IsReady)).ToArray(),
             snapshot.Cards.Select(card => new MeetingCardResponse(
                 card.Id.ToString(),
                 card.ColumnId.ToString(),
@@ -46,7 +47,8 @@ public static class ApiMappings
                 card.IsMine,
                 card.IsHidden,
                 card.Version,
-                card.GroupId?.ToString())).ToArray(),
+                card.GroupId?.ToString(),
+                card.OriginalColumnColor)).ToArray(),
             snapshot.Groups.Select(group => new MeetingGroupResponse(
                 group.Id.ToString(),
                 group.ColumnId.ToString(),

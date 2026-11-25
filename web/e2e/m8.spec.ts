@@ -1,5 +1,5 @@
 import { expect, Page, test } from '@playwright/test';
-import { closeContextGracefully } from './helpers';
+import { advanceBeforeEveryoneIsReady, closeContextGracefully } from './helpers';
 
 async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
   await page.goto(`${baseURL}/login`);
@@ -23,22 +23,22 @@ test('M8 mock Jira export shares created status and locks the action in two cont
   await first.getByLabel('Название встречи').fill('Ретро M8 mock Jira');
   await first.getByRole('button', { name: 'Создать ретро', exact: true }).click();
   await expect(first.getByRole('heading', { name: 'Ретро M8 mock Jira' })).toBeVisible();
-  await first.getByRole('button', { name: 'Показать приглашение' }).click();
+  await first.getByRole('button', { name: 'Пригласить', exact: true }).click();
   const invite = await first.getByLabel('Ссылка приглашения').inputValue();
   await first.getByRole('button', { name: 'Закрыть приглашение' }).click();
   await second.goto(invite);
   await second.getByRole('button', { name: 'Вступить во встречу' }).click();
-  await expect(second.getByText('Сбор карточек', { exact: true })).toBeVisible();
+  await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Сбор карточек');
   const column = first.getByRole('region', { name: 'Начать', exact: true });
   await column.getByRole('button', { name: 'Добавить карточку' }).click();
   await column.getByLabel('Новая карточка').fill('Тема для экспорта');
   await column.getByRole('button', { name: 'Добавить карточку' }).click();
   await expect(column.getByText('Тема для экспорта', { exact: true })).toBeVisible();
-  await first.getByRole('button', { name: 'Перейти к группировке' }).click();
-  await expect(second.getByText('Группировка', { exact: true })).toBeVisible();
-  await first.getByRole('button', { name: 'Открыть голосование' }).click();
-  await expect(second.getByText('Голосование', { exact: true })).toBeVisible();
-  await first.getByRole('button', { name: 'Перейти к обсуждению' }).click();
+  await advanceBeforeEveryoneIsReady(first, 'Перейти к группировке');
+  await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Группировка');
+  await advanceBeforeEveryoneIsReady(first, 'Открыть голосование');
+  await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Голосование');
+  await advanceBeforeEveryoneIsReady(first, 'Перейти к обсуждению');
   await expect(second.getByRole('heading', { name: 'Текущая тема: Тема для экспорта' })).toBeVisible();
 
   await first.getByLabel('Новая задача').fill('Задача для mock Jira');

@@ -10,16 +10,26 @@ import { MeetingService } from './meeting.service';
   selector: 'app-meeting-invite',
   imports: [TuiButton],
   template: `
-    <button tuiButton type="button" appearance="secondary" size="s" [disabled]="disabled() || busy()" (click)="open()">Показать приглашение</button>
-    <dialog #modal class="meeting-dialog" aria-labelledby="invite-title">
+    <button tuiButton type="button" appearance="secondary" size="s" [disabled]="disabled() || busy()"
+      [class.invite-icon]="iconOnly()" [attr.aria-label]="iconOnly() ? 'Пригласить участника' : null"
+      [attr.title]="iconOnly() ? 'Пригласить участника' : null" (click)="open()">
+      @if (iconOnly()) {
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+          <circle cx="9" cy="7" r="3" /><path d="M3 20v-2a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v2m3-13v8m-4-4h8" />
+        </svg>
+      } @else {
+        Пригласить
+      }
+    </button>
+    <dialog #modal class="meeting-dialog" aria-label="Пригласить команду" (close)="!modal.open && invite.set(null)">
       <header class="meeting-dialog-heading">
-        <h2 id="invite-title">Пригласить команду</h2>
+        <h2>Пригласить команду</h2>
         <button tuiButton type="button" appearance="secondary" size="s" aria-label="Закрыть приглашение" (click)="modal.close()">×</button>
       </header>
       @if (error(); as message) {
         <p class="field-error" role="alert">{{ message }}</p>
       }
-      @if (invite(); as current) {
+      @if (modal.open && invite(); as current) {
         <p>Отправьте участникам ссылку или QR-код.</p>
         <div class="invite-content">
           <div>
@@ -49,6 +59,7 @@ export class MeetingInvite {
   private readonly modal = viewChild.required<ElementRef<HTMLDialogElement>>('modal');
   readonly meetingId = input.required<string>();
   readonly disabled = input(false);
+  readonly iconOnly = input(false);
   readonly invite = signal<Invite | null>(null);
   readonly copied = signal(false);
   readonly error = signal<string | null>(null);

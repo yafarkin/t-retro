@@ -43,6 +43,7 @@ public sealed class BoardApiTests
         using var document = JsonDocument.Parse(raw);
         var cardJson = document.RootElement.GetProperty("cards")[0];
         Assert.Equal(!privateCollection, cardJson.TryGetProperty("text", out _));
+        Assert.Equal(!privateCollection, cardJson.TryGetProperty("originalColumnColor", out _));
         Assert.Equal(!authorHidden, cardJson.TryGetProperty("authorId", out _));
         Assert.Equal(!authorHidden, cardJson.TryGetProperty("authorDisplayName", out _));
         if (privateCollection)
@@ -233,6 +234,8 @@ public sealed class BoardApiTests
         Assert.Equal(1, memberState!.Readiness!.ReadyCount);
         Assert.Equal(2, memberState.Readiness.TotalCount);
         Assert.False(memberState.Readiness.MyReady);
+        Assert.True(memberState.Participants.Single(participant => participant.Subject == "ready-facilitator").IsReady);
+        Assert.False(memberState.Participants.Single(participant => participant.Subject == "ready-member").IsReady);
         await SetReadyAsync(member, meeting.Id, true);
         var allReady = await facilitator.GetFromJsonAsync<MeetingStateResponse>($"/api/meetings/{meeting.Id}/state");
         Assert.Equal("Collect", allReady!.Phase);
@@ -252,11 +255,22 @@ public sealed class BoardApiTests
         var afterExclusion = await facilitator.GetFromJsonAsync<MeetingStateResponse>($"/api/meetings/{meeting.Id}/state");
         Assert.Equal(2, afterExclusion!.Readiness!.ReadyCount);
         Assert.Equal(2, afterExclusion.Readiness.TotalCount);
+        Assert.False(afterExclusion.Participants.Single(participant => participant.Id == late.Id).IsReady);
 
         await AdvanceAsync(facilitator, meeting.Id, "Collect", afterExclusion.Version);
         var grouped = await facilitator.GetFromJsonAsync<MeetingStateResponse>($"/api/meetings/{meeting.Id}/state");
-        Assert.Null(grouped!.Readiness);
-        await AdvanceAsync(facilitator, meeting.Id, "Group", grouped.Version);
+        Assert.Equal(0, grouped!.Readiness!.ReadyCount);
+        Assert.Equal(2, grouped.Readiness.TotalCount);
+        Assert.All(grouped.Participants, participant => Assert.False(participant.IsReady));
+
+        await SetReadyAsync(member, meeting.Id, true, "Group");
+        var groupReady = await facilitator.GetFromJsonAsync<MeetingStateResponse>($"/api/meetings/{meeting.Id}/state");
+        Assert.Equal("Group", groupReady!.Phase);
+        Assert.Equal(1, groupReady.Readiness!.ReadyCount);
+        Assert.False(groupReady.Readiness.MyReady);
+        Assert.True(groupReady.Participants.Single(participant => participant.Subject == "ready-member").IsReady);
+
+        await AdvanceAsync(facilitator, meeting.Id, "Group", groupReady.Version);
         var voting = await facilitator.GetFromJsonAsync<MeetingStateResponse>($"/api/meetings/{meeting.Id}/state");
         Assert.Equal(0, voting!.Readiness!.ReadyCount);
         Assert.Equal(2, voting.Readiness.TotalCount);
@@ -321,11 +335,11 @@ public sealed class BoardApiTests
         response.EnsureSuccessStatusCode();
     }
 
-    private static async Task SetReadyAsync(HttpClient client, string meetingId, bool ready)
+    private static async Task SetReadyAsync(HttpClient client, string meetingId, bool ready, string phase = "Collect")
     {
         var response = await client.PutAsJsonAsync(
             $"/api/meetings/{meetingId}/ready",
-            new SetReadinessRequest { Phase = "Collect", Ready = ready });
+            new SetReadinessRequest { Phase = phase, Ready = ready });
         response.EnsureSuccessStatusCode();
     }
 }

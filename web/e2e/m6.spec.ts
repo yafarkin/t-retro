@@ -1,5 +1,5 @@
 import { expect, Page, test } from '@playwright/test';
-import { closeContextGracefully } from './helpers';
+import { advanceBeforeEveryoneIsReady, closeContextGracefully, voteControls } from './helpers';
 
 async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
   await page.goto(`${baseURL}/login`);
@@ -18,12 +18,12 @@ async function addCard(page: Page, columnName: string, text: string): Promise<vo
 }
 
 async function voteTwice(page: Page, topicTitle: string): Promise<void> {
-  const topic = page.locator('.vote-topic').filter({ has: page.getByRole('heading', { name: topicTitle, exact: true }) });
+  const topic = voteControls(page, topicTitle);
   const button = topic.getByRole('button', { name: `Проголосовать: ${topicTitle}` });
   await button.click();
-  await expect(topic).toContainText('Ваши голоса: 1');
+  await expect(topic.getByLabel('Ваши голоса')).toHaveText('Мои 1');
   await button.click();
-  await expect(topic).toContainText('Ваши голоса: 2');
+  await expect(topic.getByLabel('Ваши голоса')).toHaveText('Мои 2');
 }
 
 test('M6 ranked queue, shared navigation, decisions, comments and actions work in two contexts', async ({ browser, baseURL }) => {
@@ -39,22 +39,22 @@ test('M6 ranked queue, shared navigation, decisions, comments and actions work i
   await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M6 обсуждение');
   await first.getByRole('button', { name: 'Создать ретро', exact: true }).click();
-  await first.getByRole('button', { name: 'Показать приглашение' }).click();
+  await first.getByRole('button', { name: 'Пригласить', exact: true }).click();
   const invite = await first.getByLabel('Ссылка приглашения').inputValue();
   await first.getByRole('button', { name: 'Закрыть приглашение' }).click();
   await second.goto(invite);
   await second.getByRole('button', { name: 'Вступить во встречу' }).click();
-  await expect(second.getByText('Сбор карточек', { exact: true })).toBeVisible();
+  await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Сбор карточек');
   await addCard(first, 'Начать', 'Тема A');
   await addCard(first, 'Перестать', 'Тема B');
   await addCard(first, 'Начать', 'Тема C');
-  await first.getByRole('button', { name: 'Перейти к группировке' }).click();
-  await expect(second.getByText('Группировка', { exact: true })).toBeVisible();
-  await first.getByRole('button', { name: 'Открыть голосование' }).click();
-  await expect(second.getByText('Голосование', { exact: true })).toBeVisible();
+  await advanceBeforeEveryoneIsReady(first, 'Перейти к группировке');
+  await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Группировка');
+  await advanceBeforeEveryoneIsReady(first, 'Открыть голосование');
+  await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Голосование');
   await voteTwice(second, 'Тема A');
   await voteTwice(first, 'Тема B');
-  await first.getByRole('button', { name: 'Перейти к обсуждению' }).click();
+  await advanceBeforeEveryoneIsReady(first, 'Перейти к обсуждению');
 
   await expect(second.getByRole('heading', { name: 'Рейтинг тем' })).toBeVisible();
   const secondQueue = second.locator('.discussion-queue-item');

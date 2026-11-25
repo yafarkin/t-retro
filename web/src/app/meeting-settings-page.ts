@@ -1,13 +1,15 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { afterNextRender, Component, computed, effect, ElementRef, inject, Injector, signal, viewChild } from '@angular/core';
+import { afterNextRender, Component, computed, DestroyRef, effect, ElementRef, inject, Injector, signal, TemplateRef, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { Observable } from 'rxjs';
 import { TuiButton } from '@taiga-ui/core';
 import { apiErrorMessage } from './api-error';
 import { MeetingForm } from './meeting-form';
+import { MeetingHeaderService } from './meeting-header.service';
 import { MeetingInvite } from './meeting-invite';
 import { MeetingTimerControls } from './meeting-timer-controls';
+import { MeetingTopicVotes } from './meeting-topic-votes';
 import {
   ActionItem,
   copyEditableColumns,
@@ -29,16 +31,40 @@ import { MeetingService } from './meeting.service';
 import { MeetingSyncService } from './meeting-sync.service';
 import { TemplateService } from './template.service';
 
+const PHASES: ReadonlyArray<{ id: MeetingPhase; label: string }> = [
+  { id: 'Draft', label: 'Подготовка' },
+  { id: 'Collect', label: 'Сбор карточек' },
+  { id: 'Group', label: 'Группировка' },
+  { id: 'Vote', label: 'Голосование' },
+  { id: 'Discuss', label: 'Обсуждение' },
+  { id: 'Closed', label: 'Итоги' },
+];
+
+interface BoardTarget {
+  kind: 'column' | 'card' | 'group';
+  id: string;
+}
+
 @Component({
   selector: 'app-meeting-settings-page',
-  imports: [FormsModule, MeetingForm, MeetingInvite, MeetingTimerControls, RouterLink, TuiButton],
+  imports: [FormsModule, MeetingForm, MeetingInvite, MeetingTimerControls, MeetingTopicVotes, TuiButton],
   providers: [MeetingSyncService],
   templateUrl: './meeting-settings-page.html',
-  styleUrls: ['./meeting-settings-page.scss', './meeting-board.scss'],
+  styleUrls: [
+    './meeting-settings-page.scss',
+    './meeting-board.scss',
+    './meeting-grouping.scss',
+    './meeting-toolbar.scss',
+    './meeting-voting.scss',
+    './meeting-dialog.scss',
+    './meeting-participants.scss',
+  ],
 })
 export class MeetingSettingsPage {
   private readonly injector = inject(Injector);
   private readonly newCardInput = viewChild<ElementRef<HTMLTextAreaElement>>('newCardInput');
+  private readonly groupNameInput = viewChild<ElementRef<HTMLInputElement>>('groupNameInput');
+  private readonly headerInvite = viewChild<TemplateRef<unknown>>('headerInvite');
   private readonly route = inject(ActivatedRoute);
   private readonly meetings = inject(MeetingService);
   private readonly templatesService = inject(TemplateService);
@@ -53,16 +79,32 @@ export class MeetingSettingsPage {
   readonly commandsBlocked = computed(() => this.busy() || !this.sync.canModify());
   readonly error = signal<string | null>(null);
   readonly notice = signal<string | null>(null);
+  readonly voteBudgetDraft = signal<number | null>(null);
+  readonly voteBudgetError = signal<string | null>(null);
+  readonly validVoteBudget = computed(() => {
+    const budget = this.voteBudgetDraft();
+    return budget !== null && Number.isInteger(budget) && budget >= 1 && budget <= 2147483647;
+  });
+  readonly voteTopicsBySource = computed(() => new Map(this.state()?.topics.map((topic) => [topic.sourceId, topic])));
   readonly selectedTemplate = signal('');
   readonly selectedMember = signal('');
+  readonly participantError = signal<string | null>(null);
   readonly cardComposerColumn = signal<string | null>(null);
   readonly newCardTexts = signal<Record<string, string>>({});
   readonly newCardAnonymity = signal<Record<string, boolean>>({});
   readonly editingCardId = signal<string | null>(null);
   readonly editingText = signal('');
   readonly proposal = signal<GroupProposal | null>(null);
-  readonly moveTargets = signal<Record<string, string>>({});
-  readonly groupNames = signal<Record<string, string>>({});
+  readonly expandedGroups = signal<ReadonlySet<string>>(new Set());
+  readonly editingGroupId = signal<string | null>(null);
+  readonly editingGroupName = signal('');
+  readonly dragSource = signal<BoardTarget | null>(null);
+  private readonly dropTarget = signal<BoardTarget | null>(null);
+  readonly blockedDropColumn = computed(() => {
+    const source = this.dragSource();
+    const card = source?.kind === 'card' ? this.state()?.cards.find((item) => item.id === source.id) : undefined;
+    return card?.groupId === null ? card.columnId : null;
+  });
   readonly newCommentText = signal('');
   readonly newDecisionText = signal('');
   readonly newActionText = signal('');
@@ -71,10 +113,32 @@ export class MeetingSettingsPage {
   readonly editingEntryId = signal<string | null>(null);
   readonly editingEntryText = signal('');
   readonly editingActionAssignee = signal('');
+  readonly participants = computed(() => {
+    const meeting = this.state();
+    return [...(meeting?.participants ?? [])].sort((left, right) =>
+      Number(right.id === meeting?.facilitatorId) - Number(left.id === meeting?.facilitatorId)
+      || left.subject.localeCompare(right.subject, 'ru'),
+    );
+  });
   readonly activeParticipants = computed(() =>
-    this.state()?.participants.filter((participant) => participant.status === 'Active') ?? []);
-  readonly otherParticipants = computed(() =>
-    this.activeParticipants().filter((participant) => participant.id !== this.state()?.facilitatorId));
+    this.participants().filter((participant) => participant.status === 'Active'));
+  readonly facilitator = computed(() =>
+    this.activeParticipants().find((participant) => participant.id === this.state()?.facilitatorId));
+  readonly canManageParticipants = computed(() => {
+    const meeting = this.state();
+    return !this.revoked() && !!meeting?.canManage && meeting.phase !== 'Closed';
+  });
+  private readonly selectedParticipant = computed(() =>
+    this.activeParticipants().find((participant) =>
+      participant.id === this.selectedMember() && participant.id !== this.state()?.facilitatorId));
+  readonly canChangeParticipant = computed(() =>
+    this.canManageParticipants() && !this.commandsBlocked() && !!this.selectedParticipant());
+  readonly roadmap = computed(() => {
+    const meeting = this.state();
+    const phases = PHASES.filter(({ id }) => id !== 'Vote' || meeting?.votingEnabled !== false);
+    const currentIndex = phases.findIndex(({ id }) => id === meeting?.phase);
+    return phases.map((phase, index) => ({ ...phase, completed: index < currentIndex, current: index === currentIndex }));
+  });
 
   readonly name = signal('');
   readonly columns = signal(defaultColumns());
@@ -84,8 +148,16 @@ export class MeetingSettingsPage {
   readonly voteSettings = signal(defaultVoteSettings());
   readonly votingEnabled = signal(true);
   private formVersion = 0;
+  private pendingAdvancePhase: MeetingPhase | null = null;
 
   constructor() {
+    const meetingHeader = inject(MeetingHeaderService);
+    effect(() => meetingHeader.title.set(this.revoked() ? null : this.state()?.name ?? null));
+    effect(() => meetingHeader.invite.set(this.canManageParticipants() ? this.headerInvite() ?? null : null));
+    inject(DestroyRef).onDestroy(() => {
+      meetingHeader.title.set(null);
+      meetingHeader.invite.set(null);
+    });
     effect(() => {
       const incoming = this.sync.snapshot();
       if (!incoming) {
@@ -153,35 +225,39 @@ export class MeetingSettingsPage {
     });
   }
 
-  excludeMember(): void {
-    const participant = this.otherParticipants().find((item) => item.id === this.selectedMember());
-    if (!participant || !window.confirm(`Исключить участника «${participant.displayName}»?`)) {
-      return;
-    }
-
-    this.meetings.exclude(this.meetingId, participant.id).subscribe({
-      next: () => {
-        this.selectedMember.set('');
-        this.notice.set('Участник исключён.');
-        void this.sync.refresh();
-      },
-      error: (error: HttpErrorResponse) => this.error.set(apiErrorMessage(error)),
-    });
+  openParticipants(dialog: HTMLDialogElement): void {
+    this.selectedMember.set('');
+    this.participantError.set(null);
+    dialog.showModal();
   }
 
-  transferRole(): void {
-    const participant = this.otherParticipants().find((item) => item.id === this.selectedMember());
-    if (!participant || !window.confirm(`Передать роль участнику «${participant.displayName}»?`)) {
+  changeParticipant(action: 'transfer' | 'exclude', dialog: HTMLDialogElement): void {
+    const participant = this.selectedParticipant();
+    if (!participant || !this.canChangeParticipant()) {
+      return;
+    }
+    if (action === 'exclude' && !window.confirm(`Исключить участника «${participant.displayName}»?`)) {
       return;
     }
 
-    this.meetings.transfer(this.meetingId, participant.id).subscribe({
+    const command = action === 'transfer'
+      ? this.meetings.transfer(this.meetingId, participant.id)
+      : this.meetings.exclude(this.meetingId, participant.id);
+    this.busy.set(true);
+    this.participantError.set(null);
+    this.notice.set(null);
+    command.subscribe({
       next: () => {
         this.selectedMember.set('');
-        this.notice.set('Роль фасилитатора передана.');
-        void this.sync.refresh();
+        if (action === 'transfer') {
+          dialog.close();
+        }
+        void this.sync.refresh().finally(() => this.busy.set(false));
       },
-      error: (error: HttpErrorResponse) => this.error.set(apiErrorMessage(error)),
+      error: (error: HttpErrorResponse) => {
+        this.participantError.set(apiErrorMessage(error));
+        void this.sync.refresh().finally(() => this.busy.set(false));
+      },
     });
   }
 
@@ -225,7 +301,6 @@ export class MeetingSettingsPage {
       next: () => {
         this.cancelNewCard(columnId);
         this.busy.set(false);
-        this.notice.set('Карточка добавлена.');
         void this.sync.refresh();
       },
       error: (error: HttpErrorResponse) => this.commandFailed(error),
@@ -259,7 +334,6 @@ export class MeetingSettingsPage {
       next: () => {
         this.cancelEdit();
         this.busy.set(false);
-        this.notice.set('Карточка обновлена.');
         void this.sync.refresh();
       },
       error: (error: HttpErrorResponse) => this.commandFailed(error),
@@ -276,7 +350,6 @@ export class MeetingSettingsPage {
     this.meetings.deleteCard(this.meetingId, card.id, card.version).subscribe({
       next: () => {
         this.busy.set(false);
-        this.notice.set('Карточка удалена.');
         void this.sync.refresh();
       },
       error: (error: HttpErrorResponse) => this.commandFailed(error),
@@ -303,23 +376,39 @@ export class MeetingSettingsPage {
     });
   }
 
-  advance(): void {
+  requestAdvance(dialog: HTMLDialogElement): void {
     const current = this.state();
-    if (!current || this.commandsBlocked()) {
+    if (!current?.canManage || current.phase === 'Closed' || this.commandsBlocked()) {
+      return;
+    }
+    if (current.readiness && current.readiness.readyCount < current.readiness.totalCount) {
+      this.pendingAdvancePhase = current.phase;
+      dialog.returnValue = '';
+      dialog.showModal();
       return;
     }
     if (current.phase === 'Discuss' && !window.confirm('Завершить ретро?')) {
       return;
     }
+    this.advance(current);
+  }
 
+  confirmAdvance(dialog: HTMLDialogElement): void {
+    const phase = this.pendingAdvancePhase;
+    this.pendingAdvancePhase = null;
+    const current = this.state();
+    if (dialog.returnValue === 'advance' && current?.canManage && current.phase === phase && !this.commandsBlocked()) {
+      this.advance(current);
+    }
+  }
+
+  private advance(current: MeetingState): void {
     this.busy.set(true);
     this.error.set(null);
     this.notice.set(null);
     this.meetings.advance(this.meetingId, current.phase, current.version).subscribe({
       next: () => {
-        this.busy.set(false);
-        this.notice.set('Встреча переведена на следующую фазу.');
-        void this.sync.refresh();
+        void this.sync.refresh().finally(() => this.busy.set(false));
       },
       error: (error: HttpErrorResponse) => this.commandFailed(error),
     });
@@ -337,71 +426,83 @@ export class MeetingSettingsPage {
     return this.state()?.cards.filter((card) => card.groupId === groupId) ?? [];
   }
 
-  moveOptions(sourceKind: string, sourceId: string): { value: string; label: string }[] {
-    const meeting = this.state();
-    if (!meeting) {
-      return [];
+  toggleGroup(groupId: string): void {
+    const expanded = new Set(this.expandedGroups());
+    if (!expanded.delete(groupId)) {
+      expanded.add(groupId);
     }
-    const columns = meeting.columns
-      .map((column) => ({ value: `column:${column.id}`, label: `Колонка: ${column.name}` }));
-    if (sourceKind === 'group') {
-      return columns;
-    }
-    const cards = meeting.cards
-      .filter((card) => card.id !== sourceId)
-      .map((card) => ({
-        value: `card:${card.id}`,
-        label: `Карточка: ${(card.text ?? '').slice(0, 60)}`,
-      }));
-    const groups = meeting.groups
-      .map((group) => ({ value: `group:${group.id}`, label: `Группа: ${group.name}` }));
-    return [...columns, ...cards, ...groups];
+    this.expandedGroups.set(expanded);
   }
 
-  selectedMoveTarget(sourceKind: string, sourceId: string): string {
-    return this.moveTargets()[`${sourceKind}:${sourceId}`] ?? '';
+  isDropTarget(kind: BoardTarget['kind'], id: string): boolean {
+    const target = this.dropTarget();
+    return target?.kind === kind && target.id === id;
   }
 
-  setMoveTarget(sourceKind: string, sourceId: string, target: string): void {
-    this.moveTargets.update((targets) => ({ ...targets, [`${sourceKind}:${sourceId}`]: target }));
-  }
-
-  move(sourceKind: string, sourceId: string): void {
-    const target = this.selectedMoveTarget(sourceKind, sourceId);
-    if (!target) {
-      return;
-    }
-    const separator = target.indexOf(':');
-    this.executeMove(sourceKind, sourceId, target.slice(0, separator), target.slice(separator + 1));
-  }
-
-  startDrag(event: DragEvent, sourceKind: string, sourceId: string): void {
+  startDrag(event: DragEvent, kind: 'card' | 'group', id: string): void {
     event.stopPropagation();
-    if (this.commandsBlocked()) {
+    if (!event.dataTransfer || this.state()?.phase !== 'Group' || this.commandsBlocked()) {
       event.preventDefault();
       return;
     }
-    event.dataTransfer?.setData('text/plain', `${sourceKind}:${sourceId}`);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', id);
+    this.dragSource.set({ kind, id });
   }
 
-  allowDrop(event: DragEvent): void {
-    event.preventDefault();
-  }
-
-  drop(event: DragEvent, targetKind: string, targetId: string): void {
-    event.preventDefault();
+  allowDrop(event: DragEvent, kind: BoardTarget['kind'], id: string): void {
     event.stopPropagation();
-    const source = event.dataTransfer?.getData('text/plain') ?? '';
-    const separator = source.indexOf(':');
-    if (separator < 0) {
+    if (!this.canDrop(this.dragSource(), kind, id)) {
+      this.dropTarget.set(null);
       return;
     }
-    this.executeMove(source.slice(0, separator), source.slice(separator + 1), targetKind, targetId);
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+    if (!this.isDropTarget(kind, id)) {
+      this.dropTarget.set({ kind, id });
+    }
+  }
+
+  leaveBoard(event: DragEvent): void {
+    if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) {
+      this.dropTarget.set(null);
+    }
+  }
+
+  finishDrag(): void {
+    this.dragSource.set(null);
+    this.dropTarget.set(null);
+  }
+
+  drop(event: DragEvent, kind: BoardTarget['kind'], id: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const source = this.dragSource();
+    const allowed = this.canDrop(source, kind, id);
+    this.finishDrag();
+    if (allowed) {
+      this.executeMove(source.kind, source.id, kind, id);
+    }
+  }
+
+  private canDrop(source: BoardTarget | null, kind: BoardTarget['kind'], id: string): source is BoardTarget {
+    return !!source && this.state()?.phase === 'Group' && !this.commandsBlocked()
+      && (source.kind === 'card' || kind === 'column')
+      && (kind !== 'column' || this.blockedDropColumn() !== id)
+      && (source.kind !== kind || source.id !== id);
+  }
+
+  editGroupName(group: MeetingGroup): void {
+    this.editingGroupName.set(group.name);
+    this.editingGroupId.set(group.id);
+    afterNextRender(() => this.groupNameInput()?.nativeElement.select(), { injector: this.injector });
   }
 
   renameGroup(group: MeetingGroup): void {
     const current = this.state();
-    const name = this.groupNames()[group.id] ?? group.name;
+    const name = this.editingGroupName();
     if (!current || this.commandsBlocked() || !name.trim()) {
       return;
     }
@@ -409,16 +510,11 @@ export class MeetingSettingsPage {
     this.error.set(null);
     this.meetings.renameGroup(this.meetingId, group.id, name, current.boardVersion).subscribe({
       next: () => {
-        this.busy.set(false);
-        this.notice.set('Название группы изменено.');
-        void this.sync.refresh();
+        this.editingGroupId.set(null);
+        void this.sync.refresh().finally(() => this.busy.set(false));
       },
       error: (error: HttpErrorResponse) => this.commandFailed(error),
     });
-  }
-
-  setGroupName(groupId: string, name: string): void {
-    this.groupNames.update((names) => ({ ...names, [groupId]: name }));
   }
 
   previewGroups(): void {
@@ -448,7 +544,6 @@ export class MeetingSettingsPage {
       next: () => {
         this.proposal.set(null);
         this.busy.set(false);
-        this.notice.set('Предложение применено.');
         void this.sync.refresh();
       },
       error: (error: HttpErrorResponse) => this.commandFailed(error),
@@ -473,10 +568,7 @@ export class MeetingSettingsPage {
     if (!current || seconds <= 0 || this.commandsBlocked()) {
       return;
     }
-    this.executeTimerCommand(
-      this.meetings.startTimer(this.meetingId, seconds),
-      'Таймер запущен.',
-    );
+    this.executeTimerCommand(this.meetings.startTimer(this.meetingId, seconds));
   }
 
   addTimer(seconds: number): void {
@@ -484,10 +576,7 @@ export class MeetingSettingsPage {
     if (!current?.timer || seconds <= 0 || this.commandsBlocked()) {
       return;
     }
-    this.executeTimerCommand(
-      this.meetings.addTimer(this.meetingId, current.timer.runId, seconds),
-      'Время добавлено.',
-    );
+    this.executeTimerCommand(this.meetings.addTimer(this.meetingId, current.timer.runId, seconds));
   }
 
   stopTimer(): void {
@@ -495,19 +584,15 @@ export class MeetingSettingsPage {
     if (!current?.timer || this.commandsBlocked()) {
       return;
     }
-    this.executeTimerCommand(
-      this.meetings.stopTimer(this.meetingId, current.timer.runId),
-      'Таймер остановлен.',
-    );
+    this.executeTimerCommand(this.meetings.stopTimer(this.meetingId, current.timer.runId));
   }
 
-  private executeTimerCommand(command: Observable<unknown>, success: string): void {
+  private executeTimerCommand(command: Observable<unknown>): void {
     this.busy.set(true);
     this.error.set(null);
     this.notice.set(null);
     command.subscribe({
       next: () => {
-        this.notice.set(success);
         void this.sync.refresh().finally(() => this.busy.set(false));
       },
       error: (error: HttpErrorResponse) => {
@@ -542,10 +627,7 @@ export class MeetingSettingsPage {
     if (!current || this.commandsBlocked()) {
       return;
     }
-    this.executeDiscussionCommand(
-      this.meetings.selectCurrentTopic(this.meetingId, topicId, current.version),
-      'Тема выбрана.',
-    );
+    this.executeDiscussionCommand(this.meetings.selectCurrentTopic(this.meetingId, topicId, current.version));
   }
 
   setDiscussionStatus(status: DiscussionStatus, advance: boolean): void {
@@ -556,7 +638,6 @@ export class MeetingSettingsPage {
     }
     this.executeDiscussionCommand(
       this.meetings.setTopicStatus(this.meetingId, topic.id, status, advance, current.version),
-      advance ? 'Открыта следующая тема.' : 'Статус темы изменён.',
     );
   }
 
@@ -578,7 +659,6 @@ export class MeetingSettingsPage {
     }
     this.executeDiscussionCommand(
       this.meetings.createComment(this.meetingId, topic.id, text, current.version),
-      'Комментарий добавлен.',
       () => this.newCommentText.set(''),
     );
   }
@@ -592,7 +672,6 @@ export class MeetingSettingsPage {
     }
     this.executeDiscussionCommand(
       this.meetings.createDecision(this.meetingId, topic.id, text, current.version),
-      'Решение добавлено.',
       () => this.newDecisionText.set(''),
     );
   }
@@ -612,7 +691,6 @@ export class MeetingSettingsPage {
         this.newActionAssignee() || null,
         current.version,
       ),
-      'Задача добавлена.',
       () => {
         this.newActionText.set('');
         this.newActionAssignee.set('');
@@ -698,7 +776,7 @@ export class MeetingSettingsPage {
           this.editingActionAssignee() || null,
           current.version,
         );
-    this.executeDiscussionCommand(command, 'Изменения сохранены.', () => this.cancelEntryEdit());
+    this.executeDiscussionCommand(command, () => this.cancelEntryEdit());
   }
 
   deleteEntry(kind: 'comments' | 'decisions' | 'actions', entryId: string): void {
@@ -711,7 +789,7 @@ export class MeetingSettingsPage {
       : kind === 'decisions'
         ? this.meetings.deleteDecision(this.meetingId, entryId, current.version)
         : this.meetings.deleteAction(this.meetingId, entryId, current.version);
-    this.executeDiscussionCommand(command, 'Запись удалена.');
+    this.executeDiscussionCommand(command);
   }
 
   availableAssignees(currentAssigneeId: string | null = null) {
@@ -742,10 +820,7 @@ export class MeetingSettingsPage {
     if (!this.canExport(action) || this.commandsBlocked()) {
       return;
     }
-    this.executeDiscussionCommand(
-      this.meetings.exportAction(this.meetingId, action.id),
-      'Mock Jira обработал запрос экспорта.',
-    );
+    this.executeDiscussionCommand(this.meetings.exportAction(this.meetingId, action.id));
   }
 
   exportStatusLabel(status: string): string {
@@ -762,7 +837,6 @@ export class MeetingSettingsPage {
 
   private executeDiscussionCommand(
     command: ReturnType<MeetingService['updateComment']>,
-    success: string,
     after?: () => void,
   ): void {
     this.busy.set(true);
@@ -771,7 +845,6 @@ export class MeetingSettingsPage {
     command.subscribe({
       next: () => {
         after?.();
-        this.notice.set(success);
         void this.sync.refresh().finally(() => this.busy.set(false));
       },
       error: (error: HttpErrorResponse) => {
@@ -781,22 +854,33 @@ export class MeetingSettingsPage {
     });
   }
 
-  saveVoteSettings(): void {
+  openVoteBudget(dialog: HTMLDialogElement): void {
+    this.voteBudgetDraft.set(this.state()?.voting?.budget ?? null);
+    this.voteBudgetError.set(null);
+    dialog.showModal();
+  }
+
+  saveVoteBudget(dialog: HTMLDialogElement): void {
     const current = this.state();
-    if (!current || this.commandsBlocked()) {
+    const budget = this.voteBudgetDraft();
+    if (!current?.canManage || !current.voting || budget === null || !this.validVoteBudget() || this.commandsBlocked()) {
+      return;
+    }
+    if (budget === current.voting.budget) {
+      dialog.close();
       return;
     }
     this.busy.set(true);
-    this.error.set(null);
-    this.notice.set(null);
-    this.meetings.updateVoteSettings(this.meetingId, current.version, this.voteSettings()).subscribe({
+    this.voteBudgetError.set(null);
+    const settings = { ...current.voteSettings, mode: 'fixed' as const, fixed: budget };
+    this.meetings.updateVoteSettings(this.meetingId, current.version, settings).subscribe({
       next: () => {
-        this.notice.set('Бюджет голосов обновлён.');
+        dialog.close();
         void this.sync.refresh().finally(() => this.busy.set(false));
       },
       error: (error: HttpErrorResponse) => {
-        this.commandFailed(error);
-        void this.sync.refresh();
+        this.voteBudgetError.set(apiErrorMessage(error));
+        void this.sync.refresh().finally(() => this.busy.set(false));
       },
     });
   }
@@ -840,50 +924,8 @@ export class MeetingSettingsPage {
     return columnId ? this.columnName(columnId) : '';
   }
 
-  topicCardCount(topic: MeetingState['topics'][number]): number {
-    const current = this.state();
-    return topic.kind === 'group'
-      ? current?.cards.filter((card) => card.groupId === topic.sourceId).length ?? 0
-      : 1;
-  }
-
-  budgetFormula(): string {
-    const current = this.state();
-    if (!current?.voting) {
-      return '';
-    }
-    if (current.voteSettings.mode === 'fixed') {
-      return `Фиксированный бюджет B = ${current.voting.budget}.`;
-    }
-    const voting = current.voting;
-    return `B = max(${current.voteSettings.minimum}, ceil(${voting.originalCardCount} × ${current.voteSettings.percent} / 100)) = ${voting.budget}.`;
-  }
-
   columnName(columnId: string): string {
     return this.state()?.columns.find((column) => column.id === columnId)?.name ?? '';
-  }
-
-  readinessText(): string {
-    const readiness = this.state()?.readiness;
-    if (!readiness) {
-      return '';
-    }
-    const count = `${readiness.readyCount}/${readiness.totalCount}`;
-    return readiness.readyCount === readiness.totalCount && readiness.totalCount > 0
-      ? `Все готовы (${count})`
-      : `Готово ${count}`;
-  }
-
-  phaseLabel(phase: MeetingPhase): string {
-    const labels: Record<MeetingPhase, string> = {
-      Draft: 'Подготовка',
-      Collect: 'Сбор карточек',
-      Group: 'Группировка',
-      Vote: 'Голосование',
-      Discuss: 'Обсуждение',
-      Closed: 'Завершена',
-    };
-    return labels[phase];
   }
 
   advanceLabel(phase: MeetingPhase, votingEnabled: boolean): string {
@@ -925,10 +967,7 @@ export class MeetingSettingsPage {
     this.error.set(null);
     this.meetings.move(this.meetingId, sourceKind, sourceId, targetKind, targetId, current.boardVersion).subscribe({
       next: () => {
-        this.setMoveTarget(sourceKind, sourceId, '');
-        this.busy.set(false);
-        this.notice.set('Перенос выполнен.');
-        void this.sync.refresh();
+        void this.sync.refresh().finally(() => this.busy.set(false));
       },
       error: (error: HttpErrorResponse) => this.commandFailed(error),
     });
@@ -947,7 +986,6 @@ export class MeetingSettingsPage {
     this.anonymousVotes.set(state.anonymousVotes);
     this.voteSettings.set({ ...state.voteSettings });
     this.votingEnabled.set(state.votingEnabled !== false);
-    this.groupNames.set(Object.fromEntries(state.groups.map((group) => [group.id, group.name])));
   }
 
   private payload(): MeetingSettingsPayload {

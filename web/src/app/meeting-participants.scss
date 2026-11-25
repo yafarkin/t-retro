@@ -1,0 +1,77 @@
+.participants-control {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.participants-button {
+  flex: 0 0 auto;
+  width: 2.25rem;
+  padding: 0;
+}
+
+.participants-button svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.participant-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.participant-row {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+}
+
+.participant-row.selected {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.participant-row input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.participant-row label,
+.participant-name {
+  display: grid;
+  grid-column: 2;
+  overflow-wrap: anywhere;
+}
+
+.participant-row label {
+  cursor: pointer;
+}
+
+.participant-row small {
+  color: var(--muted);
+}
+
+.participant-status {
+  display: grid;
+  justify-items: end;
+}
+
+.participant-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.participant-footer {
+  margin-top: 1rem;
+}

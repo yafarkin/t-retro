@@ -1,0 +1,128 @@
+.grouping-board {
+  margin-top: 1rem;
+  padding: 0;
+  border: 0;
+}
+
+.grouping-board .board-column {
+  box-sizing: border-box;
+  flex: 1 0 min(20rem, 85vw);
+  min-width: 0;
+  padding: 0.95rem;
+}
+
+.grouping-board .column-label {
+  overflow-wrap: anywhere;
+}
+
+.card-group {
+  margin-top: 0.75rem;
+  padding: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.95rem;
+  background: var(--surface);
+}
+
+.group-heading {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 2.25rem;
+  margin-bottom: 0.45rem;
+}
+
+.group-heading h4 {
+  flex: 1;
+  margin: 0 0 0 0.45rem;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.group-heading input {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.group-heading svg,
+.group-toggle svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.group-heading button {
+  flex-shrink: 0;
+}
+
+.group-cards {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.group-cards .card {
+  margin-top: 0;
+}
+
+.grouping-board .card,
+.group-peek span {
+  border-inline-start: 4px solid var(--card-color, var(--column-color));
+}
+
+.group-peek {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0.15rem 0.25rem 0;
+}
+
+.group-peek span {
+  height: 0.35rem;
+  border-block: 1px solid var(--line);
+  border-inline-end: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: var(--paper);
+}
+
+.group-toggle {
+  display: flex;
+  margin: 0.25rem auto 0;
+}
+
+.group-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.grouping-board [draggable='true'] {
+  cursor: grab;
+}
+
+.grouping-board .is-dragging [draggable='true'] {
+  cursor: grabbing;
+}
+
+.column-drop-space {
+  min-height: 2.25rem;
+  margin-top: 0.45rem;
+  border: 1px dashed transparent;
+  border-radius: 0.6rem;
+}
+
+.column-drop-space.available {
+  border-color: var(--line);
+}
+
+.grouping-board .drag-target {
+  outline: 2px solid var(--accent-line);
+  outline-offset: -2px;
+}
+
+.board-column.drag-target > .column-drop-space {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}

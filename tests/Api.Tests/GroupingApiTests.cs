@@ -100,6 +100,8 @@ public sealed class GroupingApiTests
         var movedGroup = await StateAsync(facilitator, meeting.Id);
         Assert.Equal(initial.Columns[0].Id, Assert.Single(movedGroup.Groups).ColumnId);
         Assert.Equal(2, movedGroup.Cards.Count(card => card.GroupId == recreatedGroup.Id && card.ColumnId == initial.Columns[0].Id));
+        Assert.Equal(initial.Columns[0].Color, movedGroup.Cards.Single(card => card.Id == firstCard).OriginalColumnColor);
+        Assert.Equal(initial.Columns[1].Color, movedGroup.Cards.Single(card => card.Id == secondCard).OriginalColumnColor);
 
         var stale = await MoveAsync(
             facilitator,

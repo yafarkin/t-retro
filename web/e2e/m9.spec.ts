@@ -1,5 +1,5 @@
 import { expect, Page, test } from '@playwright/test';
-import { closeContextGracefully } from './helpers';
+import { advanceBeforeEveryoneIsReady, closeContextGracefully, voteControls } from './helpers';
 
 async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
   await page.goto(`${baseURL}/login`);
@@ -30,33 +30,35 @@ test('M9 two participants close a meeting and download the same PDF from a perma
   await first.getByRole('button', { name: 'Выбрать шаблон' }).click();
   await first.getByLabel('Название встречи').fill('Ретро M9 завершение');
   await first.getByRole('button', { name: 'Создать ретро', exact: true }).click();
-  await first.getByRole('button', { name: 'Показать приглашение' }).click();
+  await first.getByRole('button', { name: 'Пригласить', exact: true }).click();
   const invite = await first.getByLabel('Ссылка приглашения').inputValue();
   await first.getByRole('button', { name: 'Закрыть приглашение' }).click();
   await second.goto(invite);
   await second.getByRole('button', { name: 'Вступить во встречу' }).click();
-  await expect(second.getByText('Сбор карточек', { exact: true })).toBeVisible();
+  await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Сбор карточек');
   await addCard(first, 'Начать', 'Тема A');
   await addCard(second, 'Начать', 'Тема B');
   await addCard(first, 'Перестать', 'Нулевая тема C');
-  await first.getByRole('button', { name: 'Перейти к группировке' }).click();
-  await expect(second.getByText('Группировка', { exact: true })).toBeVisible();
+  await advanceBeforeEveryoneIsReady(first, 'Перейти к группировке');
+  await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Группировка');
 
   const secondCard = second.locator('.card').filter({ has: second.getByText('Тема B', { exact: true }) });
-  await secondCard.getByLabel('Назначение переноса').selectOption({ label: 'Карточка: Тема A' });
-  await secondCard.getByRole('button', { name: 'Переместить', exact: true }).click();
+  await secondCard.dragTo(second.locator('.card').filter({ has: second.getByText('Тема A', { exact: true }) }));
   const group = first.locator('.card-group').filter({ hasText: 'Тема A' });
+  await group.getByRole('button', { name: 'Развернуть группу' }).click();
   await expect(group.locator('.card')).toHaveCount(2);
-  await group.getByLabel('Название группы').fill('Общая тема AB');
   await group.getByRole('button', { name: 'Переименовать группу' }).click();
+  await group.getByLabel('Название группы').fill('Общая тема AB');
+  await group.getByRole('button', { name: 'Сохранить название' }).click();
   await expect(second.locator('.card-group').filter({ hasText: 'Общая тема AB' })).toBeVisible();
-  await first.getByRole('button', { name: 'Открыть голосование' }).click();
-  await expect(second.getByText('Голосование', { exact: true })).toBeVisible();
-  const groupTopic = second.locator('.vote-topic').filter({ hasText: 'Общая тема AB' });
+  await advanceBeforeEveryoneIsReady(first, 'Открыть голосование');
+  await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Голосование');
+  const groupTopic = voteControls(second, 'Общая тема AB');
   await groupTopic.getByRole('button', { name: 'Проголосовать: Общая тема AB' }).click();
-  await expect(groupTopic).toContainText('Ваши голоса: 1');
-  await expect(first.locator('.vote-topic').filter({ hasText: 'Общая тема AB' })).toContainText('Всего голосов: 1');
-  await first.getByRole('button', { name: 'Перейти к обсуждению' }).click();
+  await expect(groupTopic.getByLabel('Ваши голоса')).toHaveText('Мои 1');
+  await expect(voteControls(first, 'Общая тема AB').getByLabel('Всего голосов')).toHaveText('1');
+  await expect(groupTopic.getByRole('button', { name: 'Расклад голосов' })).toHaveCount(0);
+  await advanceBeforeEveryoneIsReady(first, 'Перейти к обсуждению');
   await expect(second.getByRole('heading', { name: 'Текущая тема: Общая тема AB' })).toBeVisible();
 
   await first.getByLabel('Новое решение').fill('Решение M9');
@@ -72,8 +74,8 @@ test('M9 two participants close a meeting and download the same PDF from a perma
 
   first.once('dialog', (dialog) => dialog.accept());
   await first.getByRole('button', { name: 'Завершить ретро' }).click();
-  await expect(first.locator('.eyebrow')).toHaveText('Завершена');
-  await expect(second.locator('.eyebrow')).toHaveText('Завершена');
+  await expect(first.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Итоги');
+  await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Итоги');
   await expect(second.getByRole('heading', { name: 'Итоги встречи' })).toBeVisible();
   await expect(second.locator('.closed-summary')).toContainText('Участников: 2. Карточек: 3. Тем: 2. Голосов: 1.');
   await expect(second.locator('.closed-results')).toContainText('Общая тема AB');
@@ -107,7 +109,7 @@ test('M9 two participants close a meeting and download the same PDF from a perma
   const third = await thirdContext.newPage();
   await login(third, origin, 'm9-second', 'Второй M9');
   await third.goto(first.url());
-  await expect(third.locator('.eyebrow')).toHaveText('Завершена');
+  await expect(third.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Итоги');
   const thirdResponse = await thirdContext.request.get(`${origin}${reportUrl}`);
   expect(thirdResponse.status()).toBe(200);
   expect(firstPdf.equals(Buffer.from(await thirdResponse.body()))).toBe(true);

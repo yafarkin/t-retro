@@ -47,11 +47,13 @@ export interface Participant {
   displayName: string;
   status: 'Active' | 'Excluded';
   isOnline: boolean;
+  isReady: boolean;
 }
 
 export interface MeetingCard {
   id: string;
   columnId: string;
+  originalColumnColor?: string;
   text?: string;
   authorId?: string;
   authorDisplayName?: string;

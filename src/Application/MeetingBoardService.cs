@@ -85,11 +85,11 @@ public sealed class MeetingBoardService(
         CancellationToken cancellationToken)
     {
         if (!Enum.TryParse<MeetingPhase>(phase, true, out var parsedPhase)
-            || parsedPhase is not (MeetingPhase.Collect or MeetingPhase.Vote))
+            || !MeetingPhaseRules.SupportsReadiness(parsedPhase))
         {
             throw new DomainValidationException(
                 "InvalidReadinessPhase",
-                "Готовность доступна только во время сбора и голосования.");
+                "Готовность доступна только во время сбора, группировки и голосования.");
         }
 
         await access.GetAsync(userId, meetingId, false, cancellationToken);

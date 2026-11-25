@@ -91,6 +91,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             """
             SELECT c.id AS Id, c.meeting_id AS MeetingId, c.column_id AS ColumnId,
                    c.text AS Text, c.version AS Version, c.group_id AS GroupId, c.anonymous AS Anonymous,
+                   c.original_column_color AS OriginalColumnColor,
                    c.created_at_utc AS CreatedAtUtc, c.updated_at_utc AS UpdatedAtUtc,
                    a.user_id AS AuthorId, u.display_name AS AuthorDisplayName
             FROM cards c
@@ -112,7 +113,8 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                     row.GroupId is null ? null : Guid.Parse(row.GroupId),
                     row.Anonymous != 0),
                 Guid.Parse(row.AuthorId),
-                row.AuthorDisplayName))
+                row.AuthorDisplayName,
+                row.OriginalColumnColor))
             .ToArray();
         var readyUserIds = (await connection.QueryAsync<string>(
             "SELECT user_id FROM readiness WHERE meeting_id = @MeetingId AND phase = @Phase;",
@@ -809,19 +811,11 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
             return new MeetingCommandResult(MeetingCommandStatus.InvalidPhase);
         }
 
-        var columnExists = await connection.ExecuteScalarAsync<int>(
-            "SELECT COUNT(*) FROM columns WHERE meeting_id = @MeetingId AND id = @ColumnId;",
-            new { MeetingId = card.MeetingId.ToString(), ColumnId = card.ColumnId.ToString() },
-            transaction);
-        if (columnExists == 0)
-        {
-            return new MeetingCommandResult(MeetingCommandStatus.NotFound);
-        }
-
-        await connection.ExecuteAsync(
+        var inserted = await connection.ExecuteAsync(
             """
-            INSERT INTO cards (meeting_id, id, column_id, text, version, created_at_utc, updated_at_utc, anonymous)
-            VALUES (@MeetingId, @Id, @ColumnId, @Text, @Version, @CreatedAtUtc, @UpdatedAtUtc, @Anonymous);
+            INSERT INTO cards (meeting_id, id, column_id, text, version, created_at_utc, updated_at_utc, anonymous, original_column_color)
+            SELECT @MeetingId, @Id, @ColumnId, @Text, @Version, @CreatedAtUtc, @UpdatedAtUtc, @Anonymous, color
+            FROM columns WHERE meeting_id = @MeetingId AND id = @ColumnId;
             """,
             new
             {
@@ -835,6 +829,11 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
                 UpdatedAtUtc = card.UpdatedAtUtc.ToString("O"),
             },
             transaction);
+        if (inserted == 0)
+        {
+            return new MeetingCommandResult(MeetingCommandStatus.NotFound);
+        }
+
         await connection.ExecuteAsync(
             """
             INSERT INTO card_authors (meeting_id, card_id, user_id)
@@ -1049,7 +1048,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         }
 
         if (state!.Phase != phase.ToString()
-            || phase is not (MeetingPhase.Collect or MeetingPhase.Vote))
+            || !MeetingPhaseRules.SupportsReadiness(phase))
         {
             return new MeetingCommandResult(MeetingCommandStatus.InvalidPhase);
         }
@@ -1613,6 +1612,7 @@ public sealed class SqliteMeetingRepository(SqliteConnectionFactory connections)
         public int Version { get; init; }
         public int Anonymous { get; init; }
         public string? GroupId { get; init; }
+        public string? OriginalColumnColor { get; init; }
         public required string CreatedAtUtc { get; init; }
         public required string UpdatedAtUtc { get; init; }
         public required string AuthorId { get; init; }

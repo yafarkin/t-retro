@@ -1,7 +1,7 @@
 .page {
   width: min(100% - 2rem, 88rem);
   margin: 0 auto;
-  padding: 2rem 0;
+  padding: 0.85rem 0 2rem;
 }
 
 header,
@@ -24,7 +24,6 @@ section {
   border-radius: 0.75rem;
 }
 
-.eyebrow,
 .hint {
   color: var(--tui-text-secondary);
 }
@@ -68,49 +67,6 @@ select {
   margin-top: 0;
 }
 
-.board-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.card-group {
-  margin-top: 1rem;
-  padding: 0.75rem;
-  border: 2px solid var(--tui-border-focus);
-  border-radius: 0.75rem;
-  background: var(--tui-background-neutral-1);
-}
-
-.card-group > label,
-.card-group > label input {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.card-group > label input {
-  min-height: 2.5rem;
-  margin-bottom: 0.5rem;
-  padding: 0.5rem;
-  border: 1px solid var(--tui-border-normal);
-  border-radius: 0.5rem;
-  font: inherit;
-}
-
-.move-controls {
-  display: grid;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
-
-.move-controls select {
-  width: 100%;
-  min-width: 0;
-}
-
 .proposal {
   margin-bottom: 1rem;
   background: var(--tui-background-neutral-1);
@@ -118,18 +74,6 @@ select {
 
 .proposal article {
   margin: 0.75rem 0;
-}
-
-[draggable='true'] {
-  cursor: grab;
-}
-
-.drag-handle {
-  display: inline-block;
-  margin-bottom: 0.4rem;
-  color: var(--tui-text-secondary);
-  font-size: 0.75rem;
-  user-select: none;
 }
 
 .card {
@@ -190,8 +134,7 @@ select {
   border-color: var(--tui-status-negative);
 }
 
-.connection,
-.presence {
+.connection {
   color: var(--tui-text-secondary);
 }
 
@@ -204,53 +147,6 @@ select {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-.budget-numbers,
-.vote-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.vote-settings {
-  display: flex;
-  align-items: end;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.vote-settings label {
-  display: grid;
-  gap: 0.4rem;
-}
-
-.vote-settings input {
-  min-height: 2.75rem;
-  box-sizing: border-box;
-  padding: 0.5rem;
-  border: 1px solid var(--tui-border-normal);
-  border-radius: 0.5rem;
-}
-
-.vote-topic {
-  display: grid;
-  grid-template-columns: minmax(12rem, 1fr) auto auto auto;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--tui-border-normal);
-}
-
-.vote-topic:last-child {
-  border-bottom: 0;
-}
-
-.vote-topic h3,
-.vote-topic p {
-  margin: 0.25rem 0;
-  overflow-wrap: anywhere;
 }
 
 .vote-breakdown {
@@ -288,7 +184,6 @@ select {
 }
 
 @media (max-width: 800px) {
-  .vote-topic,
   .discussion-queue-item {
     grid-template-columns: 1fr;
   }

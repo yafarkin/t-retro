@@ -2,6 +2,9 @@ namespace Domain;
 
 public static class MeetingPhaseRules
 {
+    public static bool SupportsReadiness(MeetingPhase phase) =>
+        phase is MeetingPhase.Collect or MeetingPhase.Group or MeetingPhase.Vote;
+
     public static MeetingPhase Next(MeetingPhase phase, bool votingEnabled = true) => phase switch
     {
         MeetingPhase.Draft => MeetingPhase.Collect,

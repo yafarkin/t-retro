@@ -13,6 +13,7 @@ import { AuthService } from './auth.service';
 export class LoginPage {
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly returnUrl: unknown = this.router.currentNavigation()?.extras.state?.['returnUrl'];
 
   readonly form = new FormGroup({
     subject: new FormControl('employee-a', { nonNullable: true }),
@@ -26,7 +27,10 @@ export class LoginPage {
 
     const value = this.form.getRawValue();
     this.auth.login(value.subject, value.displayName).subscribe({
-      next: () => this.router.navigateByUrl('/'),
+      next: () => {
+        const destination = typeof this.returnUrl === 'string' ? this.returnUrl : '/';
+        void this.router.navigateByUrl(destination, { replaceUrl: true });
+      },
       error: () => undefined,
     });
   }

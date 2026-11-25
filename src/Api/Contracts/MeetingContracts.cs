@@ -87,7 +87,8 @@ public sealed record ParticipantResponse(
     string Subject,
     string DisplayName,
     string Status,
-    bool IsOnline);
+    bool IsOnline,
+    bool IsReady);
 
 public sealed record MeetingCardResponse(
     string Id,
@@ -98,7 +99,8 @@ public sealed record MeetingCardResponse(
     bool IsMine,
     bool IsHidden,
     int Version,
-    string? GroupId);
+    string? GroupId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OriginalColumnColor);
 
 public sealed record MeetingGroupResponse(string Id, string ColumnId, string Name);
 

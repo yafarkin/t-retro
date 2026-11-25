@@ -1,5 +1,5 @@
 import { expect, BrowserContext, Page, test } from '@playwright/test';
-import { closeContextGracefully } from './helpers';
+import { advanceBeforeEveryoneIsReady, closeContextGracefully } from './helpers';
 
 async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
   await page.goto(`${baseURL}/login`);
@@ -44,12 +44,12 @@ test('M7 silent timer countdown and expiration synchronize across contexts and t
   await first.getByRole('button', { name: 'Создать ретро', exact: true }).click();
   await expect(first.getByRole('heading', { name: 'Ретро M7 таймер' })).toBeVisible();
   const meetingUrl = first.url();
-  await first.getByRole('button', { name: 'Показать приглашение' }).click();
+  await first.getByRole('button', { name: 'Пригласить', exact: true }).click();
   const invite = await first.getByLabel('Ссылка приглашения').inputValue();
   await first.getByRole('button', { name: 'Закрыть приглашение' }).click();
   await second.goto(invite);
   await second.getByRole('button', { name: 'Вступить во встречу' }).click();
-  await expect(second.getByText('Сбор карточек', { exact: true })).toBeVisible();
+  await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Сбор карточек');
   const firstTab = await firstContext.newPage();
   await firstTab.goto(meetingUrl);
   await expect(firstTab.getByRole('heading', { name: 'Ретро M7 таймер' })).toBeVisible();
@@ -62,14 +62,18 @@ test('M7 silent timer countdown and expiration synchronize across contexts and t
   for (const page of [first, firstTab, second]) {
     await expect(page.locator('.timer-countdown')).toHaveText(/^(00:[0-5]\d|01:00)$/);
   }
+  await expect(first.getByText('Таймер запущен.', { exact: true })).toHaveCount(0);
+  await expect(first.getByRole('button', { name: 'Управление таймером' })).toHaveText(/^\d{2}:\d{2}$/);
 
   await first.getByRole('button', { name: 'Управление таймером' }).click();
   await first.getByLabel('Минуты').fill('0.5');
   await first.getByRole('button', { name: 'Добавить время' }).click();
-  await expect(first.getByText('Время добавлено.', { exact: true })).toBeVisible();
+  await expect(second.locator('.timer-countdown')).toHaveText(/^01:(0[1-9]|[1-5]\d)$/);
+  await expect(first.getByText('Время добавлено.', { exact: true })).toHaveCount(0);
   await first.getByRole('button', { name: 'Управление таймером' }).click();
   await first.getByRole('button', { name: 'Остановить таймер' }).click();
   await expect(second.locator('.timer-countdown')).toHaveCount(0);
+  await expect(first.getByText('Таймер остановлен.', { exact: true })).toHaveCount(0);
   await expect(first.getByText('Время вышло', { exact: true })).toHaveCount(0);
   await expect(second.getByText('Время вышло', { exact: true })).toHaveCount(0);
 
@@ -88,7 +92,7 @@ test('M7 silent timer countdown and expiration synchronize across contexts and t
   await startTimer(first, '0.1');
   await expect(first.locator('.timer-countdown')).toBeVisible();
   await expect(first.getByText('Время вышло', { exact: true })).toHaveCount(0);
-  await first.getByRole('button', { name: 'Перейти к группировке' }).click();
+  await advanceBeforeEveryoneIsReady(first, 'Перейти к группировке');
   await expect(second.locator('.timer-countdown')).toHaveCount(0);
   await expect(second.getByText('Время вышло', { exact: true })).toHaveCount(0);
 

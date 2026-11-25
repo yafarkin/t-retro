@@ -7,15 +7,13 @@ import { TuiButton } from '@taiga-ui/core';
   imports: [FormsModule, TuiButton],
   template: `
     @if (canManage()) {
-      <button tuiButton class="timer-button" type="button" appearance="secondary" size="s"
+      <button class="timer-link" type="button"
         [attr.aria-label]="remaining() === null ? 'Настроить таймер' : 'Управление таймером'"
-        [disabled]="disabled()" (click)="modal.showModal()">
-        @if (remaining() === null) {
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
-            <circle cx="12" cy="14" r="7" /><path d="M9 2h6m-3 0v5m5 2 2-2m-7 3v4l2 2" />
-          </svg>
-          Таймер
-        } @else {
+        [disabled]="disabled()" aria-haspopup="dialog" (click)="modal.showModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="14" r="7" /><path d="M9 2h6m-3 0v5m5 2 2-2m-7 3v4l2 2" />
+        </svg>
+        @if (remaining() !== null) {
           <span class="timer-countdown" role="timer">{{ formatted() }}</span>
         }
       </button>

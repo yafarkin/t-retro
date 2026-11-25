@@ -1,11 +1,15 @@
 import { expect, Page, test } from '@playwright/test';
-import { closeContextGracefully } from './helpers';
+import { advanceBeforeEveryoneIsReady, closeContextGracefully } from './helpers';
 
-async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
-  await page.goto(`${baseURL}/login`);
+async function submitLogin(page: Page, subject: string, displayName: string): Promise<void> {
   await page.getByLabel('Идентификатор сотрудника').fill(subject);
   await page.getByLabel('Отображаемое имя').fill(displayName);
   await page.getByRole('button', { name: 'Войти', exact: true }).click();
+}
+
+async function login(page: Page, baseURL: string, subject: string, displayName: string): Promise<void> {
+  await page.goto(`${baseURL}/login`);
+  await submitLogin(page, subject, displayName);
   await expect(page.getByRole('heading', { name: 'Мои встречи' })).toBeVisible();
 }
 
@@ -156,9 +160,10 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await second.getByRole('button', { name: 'Сохранить настройки' }).click();
   await second.getByRole('button', { name: 'Создать ретро', exact: true }).click();
   await expect(second.getByRole('heading', { name: 'Ретро M1', exact: true })).toBeVisible();
-  await expect(second.getByText('Сбор карточек', { exact: true })).toBeVisible();
+  await expect(second.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Сбор карточек');
+  await expect(second.getByRole('list', { name: 'Этапы ретро' })).not.toContainText('Голосование');
   await expect(second.getByRole('heading', { name: 'Настройки подготовки' })).toHaveCount(0);
-  await expect(second.locator('.facilitator-actions').getByRole('button', { name: 'Показать приглашение' })).toBeVisible();
+  await expect(second.getByRole('banner').getByRole('button', { name: 'Пригласить', exact: true })).toBeVisible();
 
   await first.goto(`${origin}/templates`);
   const sharedCard = first.locator('article').filter({ hasText: 'Общий шаблон' });
@@ -170,7 +175,7 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await expect(second.getByRole('region', { name: 'Что попробовать' })).toContainText('Что проверим в следующем цикле');
   await expect(second.getByRole('region', { name: 'Продолжать' })).toContainText('Оставляем для этого ретро');
 
-  await second.getByRole('button', { name: 'Показать приглашение' }).click();
+  await second.getByRole('button', { name: 'Пригласить', exact: true }).click();
   const oldInvite = await second.getByLabel('Ссылка приглашения').inputValue();
   const qr = second.getByRole('img', { name: 'QR-код приглашения' });
   await expect(qr).toHaveAttribute('src', /^data:image\/gif;base64,/);
@@ -179,13 +184,21 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await second.getByRole('link', { name: 'Скачать QR-код' }).click();
   expect((await download).suggestedFilename()).toBe('t-retro-invite.gif');
   await second.getByRole('button', { name: 'Закрыть приглашение' }).click();
+  await first.getByRole('button', { name: 'Выйти', exact: true }).click();
+  await expect(first.getByRole('heading', { name: 'Локальный вход' })).toBeVisible();
   await first.goto(oldInvite);
+  await expect(first.getByRole('heading', { name: 'Локальный вход' })).toBeVisible();
+  await expect(first).toHaveURL(`${origin}/login`);
+  await first.reload();
+  await submitLogin(first, 'employee-a', 'Сотрудник А');
+  await expect(first.getByRole('heading', { name: 'Вступление во встречу' })).toBeVisible();
   await first.getByRole('button', { name: 'Вступить во встречу' }).click();
   await expect(first.getByRole('heading', { name: 'Ретро M1', exact: true })).toBeVisible();
+  await expect(first.locator('.phase-roadmap [aria-current="step"]')).toHaveText('Сбор карточек');
   await expect(first.getByRole('listitem').filter({ hasText: 'Сотрудник А' })).toBeVisible();
 
   await second.reload();
-  await second.getByRole('button', { name: 'Показать приглашение' }).click();
+  await second.getByRole('button', { name: 'Пригласить', exact: true }).click();
   second.once('dialog', (dialog) => dialog.accept());
   await second.getByRole('button', { name: 'Заменить ссылку' }).click();
   await expect(second.getByText('Версия приглашения 2.')).toBeVisible();
@@ -210,8 +223,8 @@ test('M1 templates, meeting, invitation and rotation work in independent context
   await column.getByLabel('Новая карточка').fill('Тема без голосования');
   await column.getByRole('button', { name: 'Добавить карточку' }).click();
   await expect(column.getByText('Тема без голосования', { exact: true })).toBeVisible();
-  await second.getByRole('button', { name: 'Перейти к группировке' }).click();
-  await second.getByRole('button', { name: 'Перейти к обсуждению' }).click();
+  await advanceBeforeEveryoneIsReady(second, 'Перейти к группировке');
+  await advanceBeforeEveryoneIsReady(second, 'Перейти к обсуждению');
   for (const page of [first, second]) {
     await expect(page.getByRole('heading', { name: 'Текущая тема: Тема без голосования' })).toBeVisible();
     await expect(page.locator('.discussion-queue-item')).toContainText('Всего голосов: 0');

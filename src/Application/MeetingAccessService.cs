@@ -34,22 +34,21 @@ public sealed class MeetingAccessService(
             throw new ForbiddenException("FacilitatorRequired", "Действие доступно только фасилитатору.");
         }
 
+        var hasReadiness = MeetingPhaseRules.SupportsReadiness(state.Meeting.Phase);
         var participants = state.Participants.Select(participant => participant with
         {
             IsOnline = presence.IsOnline(meetingId, participant.UserId),
+            IsReady = hasReadiness && participant.Status == MemberStatus.Active
+                && state.ReadyUserIds.Contains(participant.UserId),
         }).ToArray();
         var cards = state.Cards
             .Select(card => MeetingCardVisibility.Project(state.Meeting, card, userId))
             .ToArray();
-        var activeParticipantIds = participants
-            .Where(participant => participant.Status == MemberStatus.Active)
-            .Select(participant => participant.UserId)
-            .ToHashSet();
-        var readiness = state.Meeting.Phase is MeetingPhase.Collect or MeetingPhase.Vote
+        var readiness = hasReadiness
             ? new MeetingReadiness(
-                state.ReadyUserIds.Count(activeParticipantIds.Contains),
-                activeParticipantIds.Count,
-                state.ReadyUserIds.Contains(userId))
+                participants.Count(participant => participant.IsReady),
+                participants.Count(participant => participant.Status == MemberStatus.Active),
+                participants.Any(participant => participant.UserId == userId && participant.IsReady))
             : null;
         var showTopics = state.Meeting.Phase is MeetingPhase.Vote or MeetingPhase.Discuss or MeetingPhase.Closed;
         var topics = showTopics

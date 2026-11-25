@@ -2,7 +2,7 @@ using Domain;
 
 namespace Application;
 
-public sealed record CardData(Card Card, Guid? AuthorId, string? AuthorDisplayName);
+public sealed record CardData(Card Card, Guid? AuthorId, string? AuthorDisplayName, string? OriginalColumnColor = null);
 
 public sealed record MeetingCard(
     Guid Id,
@@ -13,7 +13,8 @@ public sealed record MeetingCard(
     bool IsMine,
     bool IsHidden,
     int Version,
-    Guid? GroupId = null);
+    Guid? GroupId = null,
+    string? OriginalColumnColor = null);
 
 public sealed record MeetingReadiness(int ReadyCount, int TotalCount, bool MyReady);
 
