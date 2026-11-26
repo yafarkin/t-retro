@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using Api.Contracts;
 using Microsoft.AspNetCore.SignalR.Client;
-using Microsoft.Data.Sqlite;
 
 namespace Api.Tests;
 
@@ -52,14 +51,16 @@ public sealed class TimerApiTests
         var addReplay = await AddAsync(facilitator, meeting.Id, timer.RunId, 30, addOperation);
         Assert.Equal(extended, await addReplay.Content.ReadFromJsonAsync<MeetingTimerResponse>());
 
-        await using (var connection = new SqliteConnection($"Data Source={factory.DatabasePath}"))
+        await using (var connection = factory.Database.CreateConnection())
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
             command.CommandText = "SELECT COUNT(*) FROM command_deduplication WHERE operation_type LIKE 'Timer%';";
             Assert.Equal(0L, (long)(await command.ExecuteScalarAsync())!);
             await using var tables = connection.CreateCommand();
-            tables.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND lower(name) LIKE '%timer%';";
+            tables.CommandText = factory.Database.IsPostgreSql
+                ? "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() AND lower(table_name) LIKE '%timer%';"
+                : "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND lower(name) LIKE '%timer%';";
             Assert.Equal(0L, (long)(await tables.ExecuteScalarAsync())!);
         }
 
@@ -126,13 +127,12 @@ public sealed class TimerApiTests
     [Fact]
     public async Task RestartLosesTimerAndCommandHistory()
     {
-        var directory = Path.Combine(Environment.CurrentDirectory, "TestData", Guid.NewGuid().ToString());
-        var databasePath = Path.Combine(directory, "test.db");
+        using var database = new ApiTestDatabase();
         TRetroWebApplicationFactory? firstFactory = null;
         TRetroWebApplicationFactory? secondFactory = null;
         try
         {
-            firstFactory = new TRetroWebApplicationFactory(databasePath: databasePath);
+            firstFactory = new TRetroWebApplicationFactory(database: database);
             await ApiTestHelpers.MigrateAsync(firstFactory);
             using var firstClient = firstFactory.CreateClient();
             await ApiTestHelpers.LoginAsync(firstClient, "restart-timer", "Ведущий");
@@ -145,7 +145,7 @@ public sealed class TimerApiTests
             firstFactory.Dispose();
             firstFactory = null;
 
-            secondFactory = new TRetroWebApplicationFactory(databasePath: databasePath);
+            secondFactory = new TRetroWebApplicationFactory(database: database);
             using var secondClient = secondFactory.CreateClient();
             await ApiTestHelpers.LoginAsync(secondClient, "restart-timer", "Ведущий");
             Assert.Null((await StateAsync(secondClient, meeting.Id)).Timer);
@@ -158,10 +158,6 @@ public sealed class TimerApiTests
         {
             firstFactory?.Dispose();
             secondFactory?.Dispose();
-            if (Directory.Exists(directory))
-            {
-                Directory.Delete(directory, true);
-            }
         }
     }
 

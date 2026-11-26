@@ -3,9 +3,9 @@ using Application;
 using Dapper;
 using Domain;
 
-namespace Infrastructure.Persistence.Sqlite;
+namespace Infrastructure.Persistence;
 
-public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connections) : IDiscussionRepository
+public sealed class DiscussionRepository(RelationalConnectionFactory connections) : IDiscussionRepository
 {
     public async Task<MeetingCommandResult> SelectCurrentAsync(
         Guid meetingId,
@@ -16,7 +16,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = connection.BeginTransaction(deferred: false);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, meetingId, cancellationToken);
         var state = await GetStateAsync(connection, transaction, meetingId, facilitatorId);
         var accessError = CheckAccess(state, facilitatorId);
         if (accessError is not null)
@@ -32,7 +32,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
 
         var topicExists = await connection.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM discussion_topics WHERE meeting_id = @MeetingId AND topic_id = @TopicId;",
-            new { MeetingId = meetingId.ToString(), TopicId = topicId.ToString() },
+            new { MeetingId = meetingId, TopicId = topicId },
             transaction);
         if (topicExists == 0)
         {
@@ -41,7 +41,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
 
         await connection.ExecuteAsync(
             "UPDATE discussion_state SET current_topic_id = @TopicId, selection_version = selection_version + 1 WHERE meeting_id = @MeetingId;",
-            new { MeetingId = meetingId.ToString(), TopicId = topicId.ToString() },
+            new { MeetingId = meetingId, TopicId = topicId },
             transaction);
         return await CompleteMutationAsync(
             connection,
@@ -63,7 +63,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = connection.BeginTransaction(deferred: false);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, meetingId, cancellationToken);
         var state = await GetStateAsync(connection, transaction, meetingId, facilitatorId);
         var accessError = CheckAccess(state, facilitatorId);
         if (accessError is not null)
@@ -84,14 +84,14 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             LEFT JOIN discussion_state s ON s.meeting_id = d.meeting_id
             WHERE d.meeting_id = @MeetingId AND d.topic_id = @TopicId;
             """,
-            new { MeetingId = meetingId.ToString(), TopicId = topicId.ToString() },
+            new { MeetingId = meetingId, TopicId = topicId },
             transaction);
         if (topic is null)
         {
             return new MeetingCommandResult(MeetingCommandStatus.NotFound);
         }
 
-        if (advance && topic.CurrentTopicId != topicId.ToString())
+        if (advance && topic.CurrentTopicId != topicId)
         {
             return new MeetingCommandResult(MeetingCommandStatus.InvalidNavigation);
         }
@@ -108,8 +108,8 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                TopicId = topicId.ToString(),
+                MeetingId = meetingId,
+                TopicId = topicId,
                 Status = status.ToString(),
             },
             transaction);
@@ -123,7 +123,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
                     selection_version = selection_version + 1
                 WHERE meeting_id = @MeetingId;
                 """,
-                new { MeetingId = meetingId.ToString(), NextPosition = topic.Position + 1 },
+                new { MeetingId = meetingId, NextPosition = topic.Position + 1 },
                 transaction);
         }
 
@@ -331,7 +331,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = connection.BeginTransaction(deferred: false);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, meetingId, cancellationToken);
         var state = await GetStateAsync(connection, transaction, meetingId, userId);
         var accessError = CheckAccess(state, userId, requireFacilitator: kind == EntryKind.Decision);
         if (accessError is not null)
@@ -361,7 +361,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
 
         var topicExists = await connection.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM discussion_topics WHERE meeting_id = @MeetingId AND topic_id = @TopicId;",
-            new { MeetingId = meetingId.ToString(), TopicId = topicId.ToString() },
+            new { MeetingId = meetingId, TopicId = topicId },
             transaction);
         if (topicExists == 0)
         {
@@ -390,12 +390,12 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             sql,
             new
             {
-                MeetingId = meetingId.ToString(),
-                Id = entryId.ToString(),
-                TopicId = topicId.ToString(),
+                MeetingId = meetingId,
+                Id = entryId,
+                TopicId = topicId,
                 Text = text,
                 Description = description,
-                AssigneeId = assigneeId?.ToString(),
+                AssigneeId = assigneeId,
                 CreatedVersion = newVersion,
             },
             transaction);
@@ -439,7 +439,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = connection.BeginTransaction(deferred: false);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, meetingId, cancellationToken);
         var state = await GetStateAsync(connection, transaction, meetingId, facilitatorId);
         var accessError = CheckAccess(state, facilitatorId);
         if (accessError is not null)
@@ -465,7 +465,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             return new MeetingCommandResult(MeetingCommandStatus.ActionLocked);
         }
 
-        var currentAssignee = current.AssigneeId is null ? (Guid?)null : Guid.Parse(current.AssigneeId);
+        var currentAssignee = current.AssigneeId is null ? (Guid?)null : current.AssigneeId;
         if (kind == EntryKind.Action
             && assigneeId != currentAssignee
             && assigneeId is not null
@@ -490,11 +490,11 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             sql,
             new
             {
-                MeetingId = meetingId.ToString(),
-                Id = entryId.ToString(),
+                MeetingId = meetingId,
+                Id = entryId,
                 Text = text,
                 Description = description,
-                AssigneeId = assigneeId?.ToString(),
+                AssigneeId = assigneeId,
             },
             transaction);
         return await CompleteMutationAsync(
@@ -516,7 +516,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = connection.BeginTransaction(deferred: false);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, meetingId, cancellationToken);
         var state = await GetStateAsync(connection, transaction, meetingId, facilitatorId);
         var accessError = CheckAccess(state, facilitatorId);
         if (accessError is not null)
@@ -545,7 +545,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         var table = TableName(kind);
         await connection.ExecuteAsync(
             $"DELETE FROM {table} WHERE meeting_id = @MeetingId AND id = @Id;",
-            new { MeetingId = meetingId.ToString(), Id = entryId.ToString() },
+            new { MeetingId = meetingId, Id = entryId },
             transaction);
         return await CompleteMutationAsync(
             connection,
@@ -567,7 +567,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         var actionFields = kind == EntryKind.Action ? ", description AS Description, assignee_id AS AssigneeId" : "";
         return await connection.QuerySingleOrDefaultAsync<EntryRow>(
             $"SELECT text AS Text{actionFields} FROM {table} WHERE meeting_id = @MeetingId AND id = @Id;",
-            new { MeetingId = meetingId.ToString(), Id = entryId.ToString() },
+            new { MeetingId = meetingId, Id = entryId },
             transaction);
     }
 
@@ -582,7 +582,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             WHERE meeting_id = @MeetingId AND action_id = @ActionId
               AND status IN ('Pending', 'Created', 'Unknown');
             """,
-            new { MeetingId = meetingId.ToString(), ActionId = actionId.ToString() },
+            new { MeetingId = meetingId, ActionId = actionId },
             transaction) == 1;
 
     private static async Task<bool> IsActiveAssigneeAsync(
@@ -592,7 +592,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         Guid assigneeId) =>
         await connection.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM members WHERE meeting_id = @MeetingId AND user_id = @UserId AND status = 'Active';",
-            new { MeetingId = meetingId.ToString(), UserId = assigneeId.ToString() },
+            new { MeetingId = meetingId, UserId = assigneeId },
             transaction) == 1;
 
     private static async Task<MeetingCommandResult> CompleteMutationAsync(
@@ -634,10 +634,10 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
+                MeetingId = meetingId,
                 ExpectedVersion = expectedVersion,
                 NewVersion = newVersion,
-                Now = nowUtc.ToString("O"),
+                Now = nowUtc,
             },
             transaction);
 
@@ -654,7 +654,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             LEFT JOIN members member ON member.meeting_id = m.id AND member.user_id = @UserId
             WHERE m.id = @MeetingId;
             """,
-            new { MeetingId = meetingId.ToString(), UserId = userId.ToString() },
+            new { MeetingId = meetingId, UserId = userId },
             transaction);
 
     private static MeetingCommandResult? CheckAccess(
@@ -666,7 +666,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         }
 
         if (state.MemberStatus == MemberStatus.Excluded.ToString()
-            || (requireFacilitator && state.FacilitatorId != userId.ToString()))
+            || (requireFacilitator && state.FacilitatorId != userId))
         {
             return new MeetingCommandResult(MeetingCommandStatus.Forbidden);
         }
@@ -699,9 +699,9 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                UserId = userId.ToString(),
-                OperationId = operationId.ToString(),
+                MeetingId = meetingId,
+                UserId = userId,
+                OperationId = operationId,
             },
             transaction);
         if (row is null)
@@ -717,7 +717,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
         return new MeetingCommandResult(
             MeetingCommandStatus.Success,
             row.ResultVersion,
-            row.ResultId is null ? null : Guid.Parse(row.ResultId),
+            row.ResultId,
             true);
     }
 
@@ -743,14 +743,14 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                UserId = userId.ToString(),
-                OperationId = operationId.ToString(),
+                MeetingId = meetingId,
+                UserId = userId,
+                OperationId = operationId,
                 OperationType = operationType,
                 Fingerprint = fingerprint,
-                ResultId = resultId.ToString(),
+                ResultId = resultId,
                 ResultVersion = resultVersion,
-                CreatedAtUtc = nowUtc.ToString("O"),
+                CreatedAtUtc = nowUtc,
             },
             transaction);
 
@@ -781,7 +781,7 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
     {
         public required string Phase { get; init; }
         public int Version { get; init; }
-        public string? FacilitatorId { get; init; }
+        public Guid? FacilitatorId { get; init; }
         public string? MemberStatus { get; init; }
     }
 
@@ -789,21 +789,21 @@ public sealed class SqliteDiscussionRepository(SqliteConnectionFactory connectio
     {
         public int Position { get; init; }
         public required string Status { get; init; }
-        public string? CurrentTopicId { get; init; }
+        public Guid? CurrentTopicId { get; init; }
     }
 
     private sealed class EntryRow
     {
         public required string Text { get; init; }
         public string? Description { get; init; }
-        public string? AssigneeId { get; init; }
+        public Guid? AssigneeId { get; init; }
     }
 
     private sealed class ReplayRow
     {
         public required string OperationType { get; init; }
         public required string Fingerprint { get; init; }
-        public string? ResultId { get; init; }
+        public Guid? ResultId { get; init; }
         public int ResultVersion { get; init; }
     }
 }

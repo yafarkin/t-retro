@@ -18,7 +18,7 @@
 | `GET /health/startup` | ASP.NET Core вызвал `ApplicationStarted`. Проверка не запускает миграции. | `startupProbe` |
 | `GET /health/ready` | БД доступна, а применённая версия схемы равна версии мигратора приложения. Ошибка чтения или несовпадение дают 503. | `readinessProbe` |
 
-Локальный адаптер [SqliteSchemaVersionReader](../src/Infrastructure/Persistence/Sqlite/SqliteSchemaVersionReader.cs) читает `schema_migrations`. Jira и ИИ в проверки не входят. Миграции запускаются отдельной командой `--migrate`. Для PostgreSQL нужны собственные реализации `ISchemaVersionReader` и `IDatabaseMigrator` за теми же портами. Kubernetes-манифестов в репозитории пока нет. HTTP-маршруты для них уже есть. Развёртывание описано в [P3.2 и P3.3](tasks.md#этап-p3-контейнер-kubernetes-и-github-actions).
+SQLite и PostgreSQL хранят версии в `schema_migrations`. Миграции запускаются отдельной командой `--migrate`. PostgreSQL использует блокировку на время транзакции, чтобы две команды миграции не применили один шаг одновременно. Jira и ИИ не влияют на результат проверок состояния. Манифесты Kubernetes остаются в плане. [SQLite](../src/Infrastructure/Persistence/Sqlite/SqliteSchemaVersionReader.cs) и [PostgreSQL](../src/Infrastructure/Persistence/PostgreSql/PostgreSqlDatabase.cs). [Задачи P3.2 и P3.3](tasks.md#этап-p3-контейнер-kubernetes-и-github-actions)
 
 Локальная проверка после `./tools/run.sh`:
 
@@ -28,4 +28,4 @@ for probe in live startup ready; do
 done
 ```
 
-[ApiSmokeTests](../tests/Api.Tests/ApiSmokeTests.cs) проверяет HTTP 503 у readiness до миграций, HTTP 200 после миграций и доступность live и startup без входа. После подключения PostgreSQL проверить на стенде, что при отключении БД readiness отвечает 503, а live продолжает отвечать 200. Повторить проверку после восстановления подключения и замены pod.
+[ApiSmokeTests](../tests/Api.Tests/ApiSmokeTests.cs) проверяет HTTP 503 у readiness до миграций, HTTP 200 после миграций и доступность live и startup без входа. Проверка замены pod и недоступности внешней PostgreSQL остаётся на этапе P4.

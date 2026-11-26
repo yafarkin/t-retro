@@ -2,9 +2,9 @@ using Application;
 using Dapper;
 using Domain;
 
-namespace Infrastructure.Persistence.Sqlite;
+namespace Infrastructure.Persistence;
 
-public sealed class SqliteEmployeeRepository(SqliteConnectionFactory connections) : IEmployeeRepository
+public sealed class EmployeeRepository(RelationalConnectionFactory connections) : IEmployeeRepository
 {
     public async Task<Employee> GetOrCreateAsync(
         string subject,
@@ -12,7 +12,7 @@ public sealed class SqliteEmployeeRepository(SqliteConnectionFactory connections
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        var now = DateTimeOffset.UtcNow.ToString("O");
+        var now = DateTimeOffset.UtcNow;
         var row = await connection.QuerySingleAsync<UserRow>(
             """
             INSERT INTO users (id, subject, display_name, created_at_utc, updated_at_utc)
@@ -24,18 +24,18 @@ public sealed class SqliteEmployeeRepository(SqliteConnectionFactory connections
             """,
             new
             {
-                Id = Guid.NewGuid().ToString(),
+                Id = Guid.NewGuid(),
                 Subject = subject,
                 DisplayName = displayName,
                 Now = now,
             });
 
-        return new Employee(Guid.Parse(row.Id), row.Subject, row.DisplayName);
+        return new Employee(row.Id, row.Subject, row.DisplayName);
     }
 
     private sealed class UserRow
     {
-        public required string Id { get; init; }
+        public Guid Id { get; init; }
 
         public required string Subject { get; init; }
 

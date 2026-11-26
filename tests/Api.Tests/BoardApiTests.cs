@@ -1,8 +1,10 @@
+using System.Data.Common;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Api.Contracts;
 using Microsoft.Data.Sqlite;
+using Npgsql;
 
 namespace Api.Tests;
 
@@ -187,7 +189,7 @@ public sealed class BoardApiTests
         var voting = await facilitator.GetFromJsonAsync<MeetingStateResponse>($"/api/meetings/{meeting.Id}/state");
         await AdvanceAsync(facilitator, meeting.Id, "Vote", voting!.Version);
         var discussion = await facilitator.GetFromJsonAsync<MeetingStateResponse>($"/api/meetings/{meeting.Id}/state");
-        await using var connection = new SqliteConnection($"Data Source={factory.DatabasePath}");
+        await using var connection = factory.Database.CreateConnection();
         await connection.OpenAsync();
         await using var fingerprintCommand = connection.CreateCommand();
         fingerprintCommand.CommandText = "SELECT fingerprint FROM command_deduplication WHERE operation_type = 'CreateCard';";
@@ -276,11 +278,46 @@ public sealed class BoardApiTests
         Assert.Equal(2, voting.Readiness.TotalCount);
         Assert.False(voting.Readiness.MyReady);
 
-        await using var connection = new SqliteConnection($"Data Source={factory.DatabasePath}");
+        await using var connection = factory.Database.CreateConnection();
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM readiness;";
         Assert.Equal(0L, (long)(await command.ExecuteScalarAsync())!);
+    }
+
+    [Fact]
+    public async Task StorageRejectsCardColumnFromAnotherMeeting()
+    {
+        using var factory = new TRetroWebApplicationFactory();
+        await ApiTestHelpers.MigrateAsync(factory);
+        using var facilitator = factory.CreateClient();
+        await ApiTestHelpers.LoginAsync(facilitator, "foreign-column", "Ведущий");
+        var meeting = await ApiTestHelpers.CreateMeetingAsync(facilitator);
+        var other = await ApiTestHelpers.CreateMeetingAsync(facilitator);
+        await AdvanceAsync(facilitator, meeting.Id, "Draft", 1);
+        var columnId = await FirstColumnIdAsync(facilitator, meeting.Id);
+        var foreignColumnId = await FirstColumnIdAsync(facilitator, other.Id);
+        var card = await CreateCardAsync(facilitator, meeting.Id, columnId, "Карточка");
+
+        await using var connection = factory.Database.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE cards SET column_id = @ColumnId WHERE meeting_id = @MeetingId AND id = @Id;";
+        command.AddId("ColumnId", Guid.Parse(foreignColumnId));
+        command.AddId("MeetingId", Guid.Parse(meeting.Id));
+        command.AddId("Id", Guid.Parse(card.Id));
+        var error = await Assert.ThrowsAnyAsync<DbException>(() => command.ExecuteNonQueryAsync());
+        if (factory.Database.IsPostgreSql)
+        {
+            Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, Assert.IsType<PostgresException>(error).SqlState);
+        }
+        else
+        {
+            Assert.Equal(787, Assert.IsType<SqliteException>(error).SqliteExtendedErrorCode);
+        }
+
+        var state = await facilitator.GetFromJsonAsync<MeetingStateResponse>($"/api/meetings/{meeting.Id}/state");
+        Assert.Equal(columnId, Assert.Single(state!.Cards).ColumnId);
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

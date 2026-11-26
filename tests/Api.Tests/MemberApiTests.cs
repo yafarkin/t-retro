@@ -8,6 +8,38 @@ namespace Api.Tests;
 public sealed class MemberApiTests
 {
     [Fact]
+    public async Task ConcurrentTransfersCanAssignOnlyOneFacilitator()
+    {
+        using var factory = new TRetroWebApplicationFactory();
+        await ApiTestHelpers.MigrateAsync(factory);
+        using var facilitator = factory.CreateClient();
+        using var firstMember = factory.CreateClient();
+        using var secondMember = factory.CreateClient();
+        await ApiTestHelpers.LoginAsync(facilitator, "transfer-owner", "Ведущий");
+        var first = await ApiTestHelpers.LoginAsync(firstMember, "transfer-first", "Первый");
+        var second = await ApiTestHelpers.LoginAsync(secondMember, "transfer-second", "Второй");
+        var meeting = await ApiTestHelpers.CreateMeetingAsync(facilitator);
+        var url = $"/api/meetings/{meeting.Id}";
+        var invitation = await facilitator.GetFromJsonAsync<InviteResponse>($"{url}/invite");
+        var join = new JoinRequest(ApiTestHelpers.TokenFromUrl(invitation!.Url));
+        (await firstMember.PostAsJsonAsync("/api/join", join)).EnsureSuccessStatusCode();
+        (await secondMember.PostAsJsonAsync("/api/join", join)).EnsureSuccessStatusCode();
+        var before = await facilitator.GetFromJsonAsync<MeetingStateResponse>($"{url}/state");
+
+        var transfers = await Task.WhenAll(
+            facilitator.PutAsJsonAsync($"{url}/facilitator", new UpdateFacilitatorRequest(Guid.Parse(first.Id))),
+            facilitator.PutAsJsonAsync($"{url}/facilitator", new UpdateFacilitatorRequest(Guid.Parse(second.Id))));
+
+        var requestStatuses = transfers.Select(response => response.StatusCode).ToArray();
+        Assert.Single(requestStatuses, status => status == HttpStatusCode.NoContent);
+        Assert.Single(requestStatuses, status => status is HttpStatusCode.Conflict or HttpStatusCode.Forbidden);
+        var after = await facilitator.GetFromJsonAsync<MeetingStateResponse>($"{url}/state");
+        Assert.Equal(before!.Version + 1, after!.Version);
+        Assert.Equal(requestStatuses[0] == HttpStatusCode.NoContent ? first.Id : second.Id, after.FacilitatorId);
+        Assert.False(after.CanManage);
+    }
+
+    [Fact]
     public async Task ExclusionRevokesAllTabsAndTransferWorksForOfflineMember()
     {
         using var factory = new TRetroWebApplicationFactory();

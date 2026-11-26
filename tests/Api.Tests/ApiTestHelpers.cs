@@ -1,12 +1,22 @@
+using System.Data.Common;
 using System.Net.Http.Json;
 using Api.Contracts;
 using Application;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 
 namespace Api.Tests;
 
 public static class ApiTestHelpers
 {
+    public static void AddId(this DbCommand command, string name, Guid id)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.Value = command is NpgsqlCommand ? id : id.ToString();
+        command.Parameters.Add(parameter);
+    }
+
     public static async Task MigrateAsync(TRetroWebApplicationFactory factory)
     {
         using var scope = factory.Services.CreateScope();

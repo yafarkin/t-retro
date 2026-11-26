@@ -4,9 +4,9 @@ using Application;
 using Dapper;
 using Domain;
 
-namespace Infrastructure.Persistence.Sqlite;
+namespace Infrastructure.Persistence;
 
-public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections) : IGroupingRepository
+public sealed class GroupingRepository(RelationalConnectionFactory connections) : IGroupingRepository
 {
     private static readonly JsonSerializerOptions ProposalJsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -25,7 +25,7 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, meetingId, cancellationToken);
         var state = await GetStateAsync(connection, transaction, meetingId, userId);
         var accessError = CheckMemberAccess(state);
         if (accessError is not null)
@@ -120,7 +120,7 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, meetingId, cancellationToken);
         var state = await GetStateAsync(connection, transaction, meetingId, userId);
         var accessError = CheckMemberAccess(state);
         if (accessError is not null)
@@ -136,7 +136,7 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
 
         var currentName = await connection.ExecuteScalarAsync<string?>(
             "SELECT name FROM groups WHERE meeting_id = @MeetingId AND id = @GroupId;",
-            new { MeetingId = meetingId.ToString(), GroupId = groupId.ToString() },
+            new { MeetingId = meetingId, GroupId = groupId },
             transaction);
         if (currentName is null)
         {
@@ -154,7 +154,7 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
 
         await connection.ExecuteAsync(
             "UPDATE groups SET name = @Name WHERE meeting_id = @MeetingId AND id = @GroupId;",
-            new { MeetingId = meetingId.ToString(), GroupId = groupId.ToString(), Name = name },
+            new { MeetingId = meetingId, GroupId = groupId, Name = name },
             transaction);
         var newVersion = state!.Version + 1;
         var newBoardVersion = state.BoardVersion + 1;
@@ -188,7 +188,7 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, meetingId, cancellationToken);
         var state = await GetStateAsync(connection, transaction, meetingId, facilitatorId);
         var accessError = CheckFacilitatorAccess(state, facilitatorId);
         if (accessError is not null)
@@ -209,12 +209,12 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                Id = proposal.Id.ToString(),
-                FacilitatorId = facilitatorId.ToString(),
+                MeetingId = meetingId,
+                Id = proposal.Id,
+                FacilitatorId = facilitatorId,
                 proposal.BoardVersion,
                 Payload = JsonSerializer.Serialize(proposal.Groups, ProposalJsonOptions),
-                CreatedAtUtc = nowUtc.ToString("O"),
+                CreatedAtUtc = nowUtc,
             },
             transaction);
         await transaction.CommitAsync(cancellationToken);
@@ -236,7 +236,7 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, meetingId, cancellationToken);
         var state = await GetStateAsync(connection, transaction, meetingId, facilitatorId);
         var accessError = CheckFacilitatorAccess(state, facilitatorId);
         if (accessError is not null)
@@ -269,7 +269,7 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
             FROM ai_proposals
             WHERE meeting_id = @MeetingId AND id = @ProposalId AND facilitator_id = @FacilitatorId;
             """,
-            new { MeetingId = meetingId.ToString(), ProposalId = proposalId.ToString(), FacilitatorId = facilitatorId.ToString() },
+            new { MeetingId = meetingId, ProposalId = proposalId, FacilitatorId = facilitatorId },
             transaction);
         if (proposal is null)
         {
@@ -358,26 +358,26 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
         IDbTransaction transaction,
         Guid meetingId)
     {
-        var parameters = new { MeetingId = meetingId.ToString() };
-        var columnIds = (await connection.QueryAsync<string>(
+        var parameters = new { MeetingId = meetingId };
+        var columnIds = (await connection.QueryAsync<Guid>(
             "SELECT id FROM columns WHERE meeting_id = @MeetingId ORDER BY position;",
             parameters,
-            transaction)).Select(Guid.Parse).ToArray();
+            transaction)).ToArray();
         var cards = (await connection.QueryAsync<BoardCardRow>(
             "SELECT id AS Id, column_id AS ColumnId, group_id AS GroupId, text AS Text FROM cards WHERE meeting_id = @MeetingId ORDER BY created_at_utc, id;",
             parameters,
             transaction))
             .Select(row => new BoardCard(
-                Guid.Parse(row.Id),
-                Guid.Parse(row.ColumnId),
-                row.GroupId is null ? null : Guid.Parse(row.GroupId),
+                row.Id,
+                row.ColumnId,
+                row.GroupId,
                 row.Text))
             .ToArray();
         var groups = (await connection.QueryAsync<BoardGroupRow>(
             "SELECT id AS Id, column_id AS ColumnId, name AS Name FROM groups WHERE meeting_id = @MeetingId;",
             parameters,
             transaction))
-            .Select(row => new BoardGroup(Guid.Parse(row.Id), Guid.Parse(row.ColumnId), row.Name))
+            .Select(row => new BoardGroup(row.Id, row.ColumnId, row.Name))
             .ToArray();
         return new BoardStructure(columnIds, cards, groups);
     }
@@ -395,9 +395,9 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
                 "INSERT INTO groups (meeting_id, id, column_id, name) VALUES (@MeetingId, @Id, @ColumnId, @Name);",
                 new
                 {
-                    MeetingId = meetingId.ToString(),
-                    Id = group.Id.ToString(),
-                    ColumnId = group.ColumnId.ToString(),
+                    MeetingId = meetingId,
+                    Id = group.Id,
+                    ColumnId = group.ColumnId,
                     group.Name,
                 },
                 transaction);
@@ -415,10 +415,10 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
                 "UPDATE cards SET column_id = @ColumnId, group_id = @GroupId WHERE meeting_id = @MeetingId AND id = @Id;",
                 new
                 {
-                    MeetingId = meetingId.ToString(),
-                    Id = card.Id.ToString(),
-                    ColumnId = card.ColumnId.ToString(),
-                    GroupId = card.GroupId?.ToString(),
+                    MeetingId = meetingId,
+                    Id = card.Id,
+                    ColumnId = card.ColumnId,
+                    GroupId = card.GroupId,
                 },
                 transaction);
         }
@@ -435,9 +435,9 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
                 "UPDATE groups SET column_id = @ColumnId, name = @Name WHERE meeting_id = @MeetingId AND id = @Id;",
                 new
                 {
-                    MeetingId = meetingId.ToString(),
-                    Id = group.Id.ToString(),
-                    ColumnId = group.ColumnId.ToString(),
+                    MeetingId = meetingId,
+                    Id = group.Id,
+                    ColumnId = group.ColumnId,
                     group.Name,
                 },
                 transaction);
@@ -447,7 +447,7 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
         {
             await connection.ExecuteAsync(
                 "DELETE FROM groups WHERE meeting_id = @MeetingId AND id = @Id;",
-                new { MeetingId = meetingId.ToString(), Id = group.Id.ToString() },
+                new { MeetingId = meetingId, Id = group.Id },
                 transaction);
         }
     }
@@ -465,7 +465,7 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
             LEFT JOIN members member ON member.meeting_id = m.id AND member.user_id = @UserId
             WHERE m.id = @MeetingId;
             """,
-            new { MeetingId = meetingId.ToString(), UserId = userId.ToString() },
+            new { MeetingId = meetingId, UserId = userId },
             transaction);
 
     private static MeetingCommandResult? CheckMemberAccess(GroupingCommandStateRow? state)
@@ -488,7 +488,7 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
             return memberError;
         }
 
-        return state!.FacilitatorId != facilitatorId.ToString()
+        return state!.FacilitatorId != facilitatorId
             ? new MeetingCommandResult(MeetingCommandStatus.Forbidden)
             : null;
     }
@@ -520,12 +520,12 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
+                MeetingId = meetingId,
                 ExpectedVersion = expectedVersion,
                 ExpectedBoardVersion = expectedBoardVersion,
                 NewVersion = newVersion,
                 NewBoardVersion = newBoardVersion,
-                Now = nowUtc.ToString("O"),
+                Now = nowUtc,
             },
             transaction);
 
@@ -548,9 +548,9 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                UserId = userId.ToString(),
-                OperationId = operationId.ToString(),
+                MeetingId = meetingId,
+                UserId = userId,
+                OperationId = operationId,
             },
             transaction);
         if (row is null)
@@ -566,7 +566,7 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
         return new MeetingCommandResult(
             MeetingCommandStatus.Success,
             row.ResultVersion,
-            row.ResultId is null ? null : Guid.Parse(row.ResultId),
+            row.ResultId,
             true,
             row.ResultBoardVersion ?? 0);
     }
@@ -594,15 +594,15 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                UserId = userId.ToString(),
-                OperationId = operationId.ToString(),
+                MeetingId = meetingId,
+                UserId = userId,
+                OperationId = operationId,
                 OperationType = operationType,
                 Fingerprint = fingerprint,
-                ResultId = resultId?.ToString(),
+                ResultId = resultId,
                 ResultVersion = resultVersion,
                 ResultBoardVersion = resultBoardVersion,
-                CreatedAtUtc = nowUtc.ToString("O"),
+                CreatedAtUtc = nowUtc,
             },
             transaction);
 
@@ -611,22 +611,22 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
         public required string Phase { get; init; }
         public int Version { get; init; }
         public int BoardVersion { get; init; }
-        public string? FacilitatorId { get; init; }
+        public Guid? FacilitatorId { get; init; }
         public string? MemberStatus { get; init; }
     }
 
     private sealed class BoardCardRow
     {
-        public required string Id { get; init; }
-        public required string ColumnId { get; init; }
-        public string? GroupId { get; init; }
+        public Guid Id { get; init; }
+        public Guid ColumnId { get; init; }
+        public Guid? GroupId { get; init; }
         public required string Text { get; init; }
     }
 
     private sealed class BoardGroupRow
     {
-        public required string Id { get; init; }
-        public required string ColumnId { get; init; }
+        public Guid Id { get; init; }
+        public Guid ColumnId { get; init; }
         public required string Name { get; init; }
     }
 
@@ -640,7 +640,7 @@ public sealed class SqliteGroupingRepository(SqliteConnectionFactory connections
     {
         public required string OperationType { get; init; }
         public required string Fingerprint { get; init; }
-        public string? ResultId { get; init; }
+        public Guid? ResultId { get; init; }
         public int ResultVersion { get; init; }
         public int? ResultBoardVersion { get; init; }
     }

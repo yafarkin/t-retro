@@ -3,9 +3,9 @@ using Application;
 using Dapper;
 using Domain;
 
-namespace Infrastructure.Persistence.Sqlite;
+namespace Infrastructure.Persistence;
 
-public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connections) : IJiraExportRepository
+public sealed class JiraExportRepository(RelationalConnectionFactory connections) : IJiraExportRepository
 {
     public async Task<JiraExportCommandResult> BeginAsync(
         Guid meetingId,
@@ -16,7 +16,7 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = connection.BeginTransaction(deferred: false);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, meetingId, cancellationToken);
         var state = await GetStateAsync(connection, transaction, meetingId, facilitatorId);
         if (state is null || state.MemberStatus is null)
         {
@@ -24,7 +24,7 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
         }
 
         if (state.MemberStatus == MemberStatus.Excluded.ToString()
-            || state.FacilitatorId != facilitatorId.ToString())
+            || state.FacilitatorId != facilitatorId)
         {
             return new JiraExportCommandResult(MeetingCommandStatus.Forbidden);
         }
@@ -56,7 +56,7 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
             LEFT JOIN users assignee ON assignee.id = member.user_id
             WHERE a.meeting_id = @MeetingId AND a.id = @ActionId;
             """,
-            new { MeetingId = meetingId.ToString(), ActionId = actionId.ToString() },
+            new { MeetingId = meetingId, ActionId = actionId },
             transaction);
         if (action is null)
         {
@@ -81,11 +81,11 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                ActionId = actionId.ToString(),
-                ExternalRequestId = externalRequestId.ToString(),
-                CreatedAtUtc = nowUtc.ToString("O"),
-                UpdatedAtUtc = nowUtc.ToString("O"),
+                MeetingId = meetingId,
+                ActionId = actionId,
+                ExternalRequestId = externalRequestId,
+                CreatedAtUtc = nowUtc,
+                UpdatedAtUtc = nowUtc,
             },
             transaction);
         var newVersion = state.Version + 1;
@@ -96,10 +96,10 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
+                MeetingId = meetingId,
                 NewVersion = newVersion,
                 ExpectedVersion = state.Version,
-                Now = nowUtc.ToString("O"),
+                Now = nowUtc,
             },
             transaction);
         if (affected == 0)
@@ -135,9 +135,9 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
         }
 
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = connection.BeginTransaction(deferred: false);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, export.MeetingId, cancellationToken);
         var current = await FindExportAsync(connection, transaction, export.MeetingId, export.ActionId);
-        if (current is null || current.ExternalRequestId != export.ExternalRequestId.ToString())
+        if (current is null || current.ExternalRequestId != export.ExternalRequestId)
         {
             throw new InvalidOperationException("Export intention is missing or changed.");
         }
@@ -155,12 +155,12 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
             """,
             new
             {
-                MeetingId = export.MeetingId.ToString(),
-                ActionId = export.ActionId.ToString(),
+                MeetingId = export.MeetingId,
+                ActionId = export.ActionId,
                 Status = status.ToString(),
                 result.IssueKey,
                 result.IssueUrl,
-                UpdatedAtUtc = nowUtc.ToString("O"),
+                UpdatedAtUtc = nowUtc,
             },
             transaction);
         await connection.ExecuteAsync(
@@ -168,7 +168,7 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
             UPDATE meetings SET version = version + 1, updated_at_utc = @Now
             WHERE id = @MeetingId AND phase IN ('Discuss', 'Closed');
             """,
-            new { MeetingId = export.MeetingId.ToString(), Now = nowUtc.ToString("O") },
+            new { MeetingId = export.MeetingId, Now = nowUtc },
             transaction);
         await transaction.CommitAsync(cancellationToken);
         return export with
@@ -191,7 +191,7 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
                    issue_key AS IssueKey, issue_url AS IssueUrl
             FROM exports WHERE meeting_id = @MeetingId AND action_id = @ActionId;
             """,
-            new { MeetingId = meetingId.ToString(), ActionId = actionId.ToString() },
+            new { MeetingId = meetingId, ActionId = actionId },
             transaction);
 
     private static async Task<ExportStateRow?> GetStateAsync(
@@ -207,14 +207,14 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
             LEFT JOIN members member ON member.meeting_id = m.id AND member.user_id = @UserId
             WHERE m.id = @MeetingId;
             """,
-            new { MeetingId = meetingId.ToString(), UserId = userId.ToString() },
+            new { MeetingId = meetingId, UserId = userId },
             transaction);
 
     private static JiraExport MapExport(ExportRow row) =>
         new(
-            Guid.Parse(row.MeetingId),
-            Guid.Parse(row.ActionId),
-            Guid.Parse(row.ExternalRequestId),
+            row.MeetingId,
+            row.ActionId,
+            row.ExternalRequestId,
             Enum.Parse<JiraExportStatus>(row.Status),
             row.IssueKey,
             row.IssueUrl);
@@ -232,7 +232,7 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
     {
         public required string Phase { get; init; }
         public int Version { get; init; }
-        public string? FacilitatorId { get; init; }
+        public Guid? FacilitatorId { get; init; }
         public string? MemberStatus { get; init; }
     }
 
@@ -246,9 +246,9 @@ public sealed class SqliteJiraExportRepository(SqliteConnectionFactory connectio
 
     private sealed class ExportRow
     {
-        public required string MeetingId { get; init; }
-        public required string ActionId { get; init; }
-        public required string ExternalRequestId { get; init; }
+        public Guid MeetingId { get; init; }
+        public Guid ActionId { get; init; }
+        public Guid ExternalRequestId { get; init; }
         public required string Status { get; init; }
         public string? IssueKey { get; init; }
         public string? IssueUrl { get; init; }

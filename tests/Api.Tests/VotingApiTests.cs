@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Api.Contracts;
-using Microsoft.Data.Sqlite;
+using Npgsql;
 
 namespace Api.Tests;
 
@@ -105,14 +105,14 @@ public sealed class VotingApiTests
         Assert.Equal(2, afterRevoke.Voting.BallotVersion);
         Assert.Equal(0, afterRevoke.Topics.Single(topic => topic.Id == groupTopic.Id).MyVotes);
 
-        await using var connection = new SqliteConnection($"Data Source={factory.DatabasePath}");
+        await using var connection = factory.Database.CreateConnection();
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT initial_card_count, (SELECT COUNT(*) FROM topics) FROM meetings WHERE id = @Id;";
-        command.Parameters.AddWithValue("@Id", meeting.Id);
+        command.CommandText = "SELECT initial_card_count, (SELECT COUNT(*) FROM topics) FROM meetings WHERE id = @MeetingId;";
+        command.AddId("MeetingId", Guid.Parse(meeting.Id));
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal(41L, reader.GetInt64(0));
+        Assert.Equal(41, reader.GetInt32(0));
         Assert.Equal(32L, reader.GetInt64(1));
     }
 
@@ -126,13 +126,21 @@ public sealed class VotingApiTests
         var memberUser = await ApiTestHelpers.LoginAsync(member, "privacy-vote-member", "Голосующий");
         await ApiTestHelpers.LoginAsync(facilitator, "privacy-vote-facilitator", "Ведущий");
         var meeting = await ApiTestHelpers.CreateMeetingAsync(facilitator, "Приватность M5");
-        await using (var connection = new SqliteConnection($"Data Source={factory.DatabasePath}"))
+        await using (var connection = factory.Database.CreateConnection())
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = "UPDATE meetings SET anonymous_votes = 0 WHERE id = $id;";
-            command.Parameters.AddWithValue("$id", meeting.Id);
-            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+            command.CommandText = "UPDATE meetings SET anonymous_votes = FALSE WHERE id = @MeetingId;";
+            command.AddId("MeetingId", Guid.Parse(meeting.Id));
+            if (factory.Database.IsPostgreSql)
+            {
+                var error = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+                Assert.Equal(PostgresErrorCodes.CheckViolation, error.SqlState);
+            }
+            else
+            {
+                Assert.Equal(1, await command.ExecuteNonQueryAsync());
+            }
         }
 
         await JoinAsync(facilitator, member, meeting.Id);

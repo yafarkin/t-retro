@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Api.Contracts;
 using Application;
-using Microsoft.Data.Sqlite;
 using UglyToad.PdfPig;
 
 namespace Api.Tests;
@@ -56,20 +55,20 @@ public sealed class CompletionApiTests
         Assert.All(closed.Cards, card => Assert.Equal(anonymousCards || card.Text == "Карточка участника", card.AuthorId is null));
         Assert.All(closed.Topics, topic => Assert.Null(topic.MyVotes));
 
-        Assert.Equal(anonymousCards ? 0 : 2, await CountAsync(factory.DatabasePath, "card_authors"));
-        Assert.Equal(0, await CountAsync(factory.DatabasePath, "votes"));
-        Assert.Equal(0, await CountAsync(factory.DatabasePath, "personal_ballots"));
+        Assert.Equal(anonymousCards ? 0 : 2, await CountAsync(factory.Database, "card_authors"));
+        Assert.Equal(0, await CountAsync(factory.Database, "votes"));
+        Assert.Equal(0, await CountAsync(factory.Database, "personal_ballots"));
         Assert.Equal(anonymousCards ? 0 : 2, await CountAsync(
-            factory.DatabasePath,
+            factory.Database,
             "command_deduplication",
             "operation_type = 'CreateCard'"));
-        Assert.Equal(1, await CountAsync(factory.DatabasePath, "meeting_totals"));
-        Assert.Equal(2, await CountAsync(factory.DatabasePath, "topic_totals"));
-        Assert.Equal(1, await CountAsync(factory.DatabasePath, "reports"));
-        Assert.Equal(0, await CountAsync(factory.DatabasePath, "readiness"));
-        Assert.Equal(3, await CountAsync(factory.DatabasePath, "members"));
-        Assert.Equal(1, await CountAsync(factory.DatabasePath, "actions"));
-        var payload = JsonSerializer.Deserialize<MeetingStateData>(await PayloadAsync(factory.DatabasePath))!;
+        Assert.Equal(1, await CountAsync(factory.Database, "meeting_totals"));
+        Assert.Equal(2, await CountAsync(factory.Database, "topic_totals"));
+        Assert.Equal(1, await CountAsync(factory.Database, "reports"));
+        Assert.Equal(0, await CountAsync(factory.Database, "readiness"));
+        Assert.Equal(3, await CountAsync(factory.Database, "members"));
+        Assert.Equal(1, await CountAsync(factory.Database, "actions"));
+        var payload = JsonSerializer.Deserialize<MeetingStateData>(await PayloadAsync(factory.Database))!;
         Assert.All(payload.Cards, card => Assert.Equal(anonymousCards || card.Card.Anonymous, card.AuthorId is null));
         Assert.Empty(payload.Votes);
         Assert.Empty(payload.Ballots);
@@ -201,20 +200,23 @@ public sealed class CompletionApiTests
         Assert.Equal(HttpStatusCode.InternalServerError, failed.StatusCode);
         var afterFailure = await StateAsync(facilitator, setup.State.Id);
         Assert.Equal("Discuss", afterFailure.Phase);
-        Assert.Equal(3, await CountAsync(factory.DatabasePath, "card_authors"));
-        Assert.Equal(3, await CountAsync(factory.DatabasePath, "votes"));
-        Assert.Equal(0, await CountAsync(factory.DatabasePath, "meeting_totals"));
-        Assert.Equal(0, await CountAsync(factory.DatabasePath, "topic_totals"));
-        Assert.Equal(0, await CountAsync(factory.DatabasePath, "reports"));
+        Assert.Equal(3, await CountAsync(factory.Database, "card_authors"));
+        Assert.Equal(3, await CountAsync(factory.Database, "votes"));
+        Assert.Equal(0, await CountAsync(factory.Database, "meeting_totals"));
+        Assert.Equal(0, await CountAsync(factory.Database, "topic_totals"));
+        Assert.Equal(0, await CountAsync(factory.Database, "reports"));
 
         factory.FailingReportGenerator!.ShouldFail = false;
-        (await CloseAsync(facilitator, setup.State.Id, request)).EnsureSuccessStatusCode();
+        var completed = await Task.WhenAll(
+            CloseAsync(facilitator, setup.State.Id, request),
+            CloseAsync(facilitator, setup.State.Id, request));
+        Assert.All(completed, response => response.EnsureSuccessStatusCode());
         var first = await facilitator.GetByteArrayAsync($"/api/meetings/{setup.State.Id}/report.pdf");
         (await CloseAsync(facilitator, setup.State.Id, request)).EnsureSuccessStatusCode();
         Assert.Equal(first, await facilitator.GetByteArrayAsync($"/api/meetings/{setup.State.Id}/report.pdf"));
-        Assert.Equal(1, await CountAsync(factory.DatabasePath, "meeting_totals"));
-        Assert.Equal(2, await CountAsync(factory.DatabasePath, "topic_totals"));
-        Assert.Equal(1, await CountAsync(factory.DatabasePath, "reports"));
+        Assert.Equal(1, await CountAsync(factory.Database, "meeting_totals"));
+        Assert.Equal(2, await CountAsync(factory.Database, "topic_totals"));
+        Assert.Equal(1, await CountAsync(factory.Database, "reports"));
     }
 
     [Fact]
@@ -425,18 +427,18 @@ public sealed class CompletionApiTests
     private static async Task<MeetingStateResponse> StateAsync(HttpClient client, string meetingId) =>
         (await client.GetFromJsonAsync<MeetingStateResponse>($"/api/meetings/{meetingId}/state"))!;
 
-    private static async Task<long> CountAsync(string databasePath, string table, string? where = null)
+    private static async Task<long> CountAsync(ApiTestDatabase database, string table, string? where = null)
     {
-        await using var connection = new SqliteConnection($"Data Source={databasePath}");
+        await using var connection = database.CreateConnection();
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = $"SELECT COUNT(*) FROM {table}{(where is null ? string.Empty : $" WHERE {where}")};";
         return (long)(await command.ExecuteScalarAsync())!;
     }
 
-    private static async Task<string> PayloadAsync(string databasePath)
+    private static async Task<string> PayloadAsync(ApiTestDatabase database)
     {
-        await using var connection = new SqliteConnection($"Data Source={databasePath}");
+        await using var connection = database.CreateConnection();
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT payload_json FROM meeting_totals;";

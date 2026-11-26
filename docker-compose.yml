@@ -3,10 +3,10 @@ x-app: &app-image
   build: .
   environment:
     ASPNETCORE_ENVIRONMENT: Development
-    Database__Provider: SQLite
-    ConnectionStrings__Default: Data Source=/app/data/t-retro.db
+    Database__Provider: PostgreSQL
+    ConnectionStrings__Default: Host=postgres;Database=t_retro;Username=t_retro
+    PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env or the environment}
   volumes:
-    - sqlite-data:/app/data
     - protection-keys:/home/app/.aspnet/DataProtection-Keys
 
 services:
@@ -21,6 +21,9 @@ services:
   migrate:
     <<: *app-image
     command: ["--migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       disable: true
 
@@ -40,6 +43,5 @@ services:
       start_period: 10s
 
 volumes:
-  sqlite-data:
   protection-keys:
   postgres-data:

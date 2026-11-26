@@ -1,7 +1,6 @@
 using System.Net.Http.Json;
 using Api.Contracts;
 using Application;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Api.Tests;
@@ -94,13 +93,13 @@ public sealed class FacilitatorElectionApiTests
         TRetroWebApplicationFactory factory,
         Guid meetingId)
     {
-        await using var connection = new SqliteConnection($"Data Source={factory.DatabasePath}");
+        await using var connection = factory.Database.CreateConnection();
         await connection.OpenAsync();
         for (var attempt = 0; attempt < 50; attempt++)
         {
             await using var command = connection.CreateCommand();
             command.CommandText = "SELECT facilitator_election_deadline_utc FROM meetings WHERE id = @MeetingId;";
-            command.Parameters.AddWithValue("@MeetingId", meetingId.ToString());
+            command.AddId("MeetingId", meetingId);
             var deadline = await command.ExecuteScalarAsync();
             if (deadline is not null and not DBNull)
             {

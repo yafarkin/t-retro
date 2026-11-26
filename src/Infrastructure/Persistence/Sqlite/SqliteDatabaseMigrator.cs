@@ -1,12 +1,12 @@
-using System.Text.RegularExpressions;
 using Application;
 using Dapper;
+using Infrastructure.Persistence.Migrations;
 
 namespace Infrastructure.Persistence.Sqlite;
 
-public sealed partial class SqliteDatabaseMigrator(SqliteConnectionFactory connections) : IDatabaseMigrator
+public sealed class SqliteDatabaseMigrator(SqliteConnectionFactory connections) : IDatabaseMigrator
 {
-    private static readonly IReadOnlyList<Migration> Migrations = LoadMigrations();
+    private static readonly IReadOnlyList<Migration> Migrations = EmbeddedMigrations.Load("SQLite");
 
     public int LatestVersion => Migrations.Max(migration => migration.Version);
 
@@ -39,29 +39,4 @@ public sealed partial class SqliteDatabaseMigrator(SqliteConnectionFactory conne
 
         await transaction.CommitAsync(cancellationToken);
     }
-
-    private static IReadOnlyList<Migration> LoadMigrations()
-    {
-        var assembly = typeof(SqliteDatabaseMigrator).Assembly;
-        return assembly.GetManifestResourceNames()
-            .Select(resourceName => (ResourceName: resourceName, Match: MigrationPattern().Match(resourceName)))
-            .Where(item => item.Match.Success)
-            .Select(item =>
-            {
-                using var stream = assembly.GetManifestResourceStream(item.ResourceName)
-                    ?? throw new InvalidOperationException("Migration resource is unavailable.");
-                using var reader = new StreamReader(stream);
-                return new Migration(
-                    int.Parse(item.Match.Groups["version"].Value),
-                    item.Match.Groups["name"].Value,
-                    reader.ReadToEnd());
-            })
-            .OrderBy(migration => migration.Version)
-            .ToArray();
-    }
-
-    [GeneratedRegex(@"(?<version>\d+)_(?<name>[^.]+)\.sql$", RegexOptions.CultureInvariant)]
-    private static partial Regex MigrationPattern();
-
-    private sealed record Migration(int Version, string Name, string Sql);
 }

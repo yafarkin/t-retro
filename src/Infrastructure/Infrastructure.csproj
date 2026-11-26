@@ -9,12 +9,14 @@
     <PackageReference Include="Dapper" Version="2.1.100" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.15" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.15" />
+    <PackageReference Include="Npgsql" Version="10.0.4" />
     <PackageReference Include="PDFsharp" Version="6.2.4" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Persistence/Migrations/SQLite/*.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/PostgreSQL/*.sql" />
     <EmbeddedResource Include="Reporting/Fonts/*.ttf" />
     <EmbeddedResource Include="Reporting/Fonts/DejaVu-LICENSE.txt" />
     <EmbeddedResource Include="Reporting/PDFsharp-LICENSE.txt" />

@@ -11,8 +11,19 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "bash -c 'cd .. && export DOTNET_ROOT=\"${DOTNET_ROOT:-/usr/local/share/dotnet}\" PATH=\"$DOTNET_ROOT:$PATH\" DOTNET_CLI_TELEMETRY_OPTOUT=1 NUGET_PACKAGES=\"$PWD/.tools/nuget/packages\" ConnectionStrings__Default=\"Data Source=$PWD/.tools/e2e/t-retro.db\" && dotnet run --project src/Api --launch-profile http -- --migrate && dotnet run --project src/Api --launch-profile http --no-build'",
-      url: 'http://127.0.0.1:5166/health/live',
+      command: `bash -c '
+        cd .. || exit 1
+        export DOTNET_ROOT="\${DOTNET_ROOT:-/usr/local/share/dotnet}"
+        export PATH="$DOTNET_ROOT:$PATH"
+        export DOTNET_CLI_TELEMETRY_OPTOUT=1 NUGET_PACKAGES="$PWD/.tools/nuget/packages"
+        if [ -n "\${TRETRO_E2E_POSTGRES:-}" ]; then
+          export Database__Provider=PostgreSQL ConnectionStrings__Default="$TRETRO_E2E_POSTGRES"
+        else
+          export Database__Provider=SQLite ConnectionStrings__Default="Data Source=$PWD/.tools/e2e/t-retro.db"
+        fi
+        dotnet run --project src/Api --launch-profile http -- --migrate &&
+        dotnet run --project src/Api --launch-profile http --no-build'`,
+      url: 'http://127.0.0.1:5166/health/ready',
       reuseExistingServer: false,
       timeout: 120_000,
     },

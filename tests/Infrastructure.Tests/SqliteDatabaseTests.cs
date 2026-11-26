@@ -1,4 +1,5 @@
 using Domain;
+using Infrastructure.Persistence;
 using Infrastructure.Persistence.Sqlite;
 using Microsoft.Data.Sqlite;
 
@@ -21,7 +22,7 @@ public sealed class SqliteDatabaseTests : IDisposable
         var schemaVersions = new SqliteSchemaVersionReader(connections);
         Assert.Equal(migrator.LatestVersion, await schemaVersions.GetCurrentVersionAsync(CancellationToken.None));
 
-        var repository = new SqliteEmployeeRepository(connections);
+        var repository = new EmployeeRepository(connections);
         var first = await repository.GetOrCreateAsync("employee-a", "Сотрудник А", CancellationToken.None);
         var second = await repository.GetOrCreateAsync("employee-a", "Новое имя", CancellationToken.None);
 
@@ -35,8 +36,8 @@ public sealed class SqliteDatabaseTests : IDisposable
         var databasePath = Path.Combine(directory, "test.db");
         var connections = new SqliteConnectionFactory($"Data Source={databasePath}", directory);
         await new SqliteDatabaseMigrator(connections).MigrateAsync(CancellationToken.None);
-        var employee = await new SqliteEmployeeRepository(connections).GetOrCreateAsync("creator", "Создатель", CancellationToken.None);
-        var repository = new SqliteMeetingRepository(connections);
+        var employee = await new EmployeeRepository(connections).GetOrCreateAsync("creator", "Создатель", CancellationToken.None);
+        var repository = new MeetingRepository(connections);
         var meetingId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         var meeting = new Meeting(

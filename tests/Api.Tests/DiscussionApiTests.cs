@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using Api.Contracts;
-using Microsoft.Data.Sqlite;
 
 namespace Api.Tests;
 
@@ -249,7 +248,7 @@ public sealed class DiscussionApiTests
         Assert.Empty(current.Discussion.Decisions);
         Assert.Equal(2, current.Discussion.Actions.Count);
 
-        await using var connection = new SqliteConnection($"Data Source={factory.DatabasePath}");
+        await using var connection = factory.Database.CreateConnection();
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT (SELECT COUNT(*) FROM comments), (SELECT COUNT(*) FROM decisions), (SELECT COUNT(*) FROM actions);";

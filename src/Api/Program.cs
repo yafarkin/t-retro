@@ -2,6 +2,8 @@ using System.Security.Claims;
 using Api;
 using Api.Contracts;
 using Application;
+using Infrastructure.Persistence;
+using Infrastructure.Persistence.PostgreSql;
 using Infrastructure.Persistence.Sqlite;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -25,14 +27,20 @@ public sealed partial class Program
         }
 
         var provider = builder.Configuration["Database:Provider"];
-        if (!string.Equals(provider, "SQLite", StringComparison.OrdinalIgnoreCase))
+        var useSqlite = string.Equals(provider, "SQLite", StringComparison.OrdinalIgnoreCase);
+        if (!useSqlite && !string.Equals(provider, "PostgreSQL", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Only the SQLite storage provider is implemented in the local MVP.");
+            throw new InvalidOperationException("Database:Provider must be SQLite or PostgreSQL.");
         }
 
-        if (!isLocalEnvironment)
+        if (useSqlite && !isLocalEnvironment)
         {
             throw new InvalidOperationException("SQLite is not allowed outside Development and Testing. Configure PostgreSQL for production.");
+        }
+
+        if (!isLocalEnvironment && !migrate)
+        {
+            throw new InvalidOperationException("Production startup requires the TWork authentication integration.");
         }
 
         var connectionString = builder.Configuration.GetConnectionString("Default");
@@ -54,18 +62,29 @@ public sealed partial class Program
                     .AllowAnyMethod()
                     .AllowCredentials()));
         }
-        builder.Services.AddSingleton(new SqliteConnectionFactory(connectionString, builder.Environment.ContentRootPath));
-        builder.Services.AddScoped<IEmployeeRepository, SqliteEmployeeRepository>();
-        builder.Services.AddScoped<ISchemaVersionReader, SqliteSchemaVersionReader>();
-        builder.Services.AddScoped<IDatabaseMigrator, SqliteDatabaseMigrator>();
-        builder.Services.AddScoped<IMeetingRepository, SqliteMeetingRepository>();
-        builder.Services.AddScoped<IMeetingCompletionRepository, SqliteMeetingCompletionRepository>();
+        if (useSqlite)
+        {
+            builder.Services.AddSingleton(new SqliteConnectionFactory(connectionString, builder.Environment.ContentRootPath));
+            builder.Services.AddSingleton<RelationalConnectionFactory>(services => services.GetRequiredService<SqliteConnectionFactory>());
+            builder.Services.AddScoped<ISchemaVersionReader, SqliteSchemaVersionReader>();
+            builder.Services.AddScoped<IDatabaseMigrator, SqliteDatabaseMigrator>();
+        }
+        else
+        {
+            builder.Services.AddSingleton<RelationalConnectionFactory>(_ => new PostgreSqlConnectionFactory(connectionString));
+            builder.Services.AddScoped<PostgreSqlDatabase>();
+            builder.Services.AddScoped<ISchemaVersionReader>(services => services.GetRequiredService<PostgreSqlDatabase>());
+            builder.Services.AddScoped<IDatabaseMigrator>(services => services.GetRequiredService<PostgreSqlDatabase>());
+        }
+        builder.Services.AddScoped<IEmployeeRepository, EmployeeRepository>();
+        builder.Services.AddScoped<IMeetingRepository, MeetingRepository>();
+        builder.Services.AddScoped<IMeetingCompletionRepository, MeetingCompletionRepository>();
         builder.Services.AddSingleton<IMeetingReportGenerator, Infrastructure.Reporting.PdfSharpMeetingReportGenerator>();
-        builder.Services.AddScoped<IGroupingRepository, SqliteGroupingRepository>();
-        builder.Services.AddScoped<IVotingRepository, SqliteVotingRepository>();
-        builder.Services.AddScoped<IDiscussionRepository, SqliteDiscussionRepository>();
-        builder.Services.AddScoped<IJiraExportRepository, SqliteJiraExportRepository>();
-        builder.Services.AddScoped<ITemplateRepository, SqliteTemplateRepository>();
+        builder.Services.AddScoped<IGroupingRepository, GroupingRepository>();
+        builder.Services.AddScoped<IVotingRepository, VotingRepository>();
+        builder.Services.AddScoped<IDiscussionRepository, DiscussionRepository>();
+        builder.Services.AddScoped<IJiraExportRepository, JiraExportRepository>();
+        builder.Services.AddScoped<ITemplateRepository, TemplateRepository>();
         builder.Services.AddScoped<DevLoginService>();
         builder.Services.AddScoped<MeetingAccessService>();
         builder.Services.AddScoped<MeetingService>();
@@ -114,7 +133,8 @@ public sealed partial class Program
             });
         builder.Services.AddAuthorization();
 
-        var app = builder.Build();
+        await using var app = builder.Build();
+        _ = app.Services.GetRequiredService<RelationalConnectionFactory>();
         app.UseExceptionHandler();
         var servesSpa = app.Environment.WebRootFileProvider.GetFileInfo("index.html").Exists;
         if (servesSpa)

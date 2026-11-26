@@ -1,15 +1,11 @@
+using System.Data.Common;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
 namespace Infrastructure.Persistence.Sqlite;
 
-public sealed class SqliteConnectionFactory
+public sealed class SqliteConnectionFactory : RelationalConnectionFactory
 {
-    static SqliteConnectionFactory()
-    {
-        DefaultTypeMap.MatchNamesWithUnderscores = true;
-    }
-
     private readonly string connectionString;
 
     public SqliteConnectionFactory(string connectionString, string contentRootPath)
@@ -25,7 +21,7 @@ public sealed class SqliteConnectionFactory
         this.connectionString = builder.ToString();
     }
 
-    public async Task<SqliteConnection> CreateOpenConnectionAsync(CancellationToken cancellationToken)
+    public override async Task<DbConnection> CreateOpenConnectionAsync(CancellationToken cancellationToken)
     {
         var builder = new SqliteConnectionStringBuilder(connectionString);
         if (builder.DataSource != ":memory:")
@@ -38,8 +34,27 @@ public sealed class SqliteConnectionFactory
         }
 
         var connection = new SqliteConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
-        await connection.ExecuteAsync("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
-        return connection;
+        try
+        {
+            await connection.OpenAsync(cancellationToken);
+            await connection.ExecuteAsync("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
+            return connection;
+        }
+        catch
+        {
+            await connection.DisposeAsync();
+            throw;
+        }
     }
+
+    public override ValueTask<DbTransaction> BeginSnapshotAsync(
+        DbConnection connection, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<DbTransaction>(((SqliteConnection)connection).BeginTransaction(deferred: true));
+    }
+
+    public override ValueTask<DbTransaction> BeginMeetingTransactionAsync(
+        DbConnection connection, Guid meetingId, CancellationToken cancellationToken) =>
+        connection.BeginTransactionAsync(cancellationToken);
 }

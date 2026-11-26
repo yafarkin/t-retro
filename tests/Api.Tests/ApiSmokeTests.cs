@@ -18,13 +18,15 @@ public sealed class ApiSmokeTests
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health/live")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health/startup")).StatusCode);
 
-        using (var scope = factory.Services.CreateScope())
-        {
-            await scope.ServiceProvider.GetRequiredService<IDatabaseMigrator>().MigrateAsync(CancellationToken.None);
-        }
+        await Task.WhenAll(ApiTestHelpers.MigrateAsync(factory), ApiTestHelpers.MigrateAsync(factory));
 
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health/ready")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/openapi/v1.json")).StatusCode);
+        await using var connection = factory.Database.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM schema_migrations;";
+        Assert.Equal(factory.Database.IsPostgreSql ? 1L : 15L, (long)(await command.ExecuteScalarAsync())!);
     }
 
     [Fact]

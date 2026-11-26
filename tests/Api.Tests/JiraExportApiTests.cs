@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using Api.Contracts;
 using Application;
 using Infrastructure.Integrations;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Api.Tests;
@@ -162,7 +161,7 @@ public sealed class JiraExportApiTests
         var response = await facilitator.PostAsync($"/api/meetings/{meetingId}/actions/{actionId}/export", null);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.Equal("IntegrationUnavailable", (await response.Content.ReadFromJsonAsync<ErrorResponse>())!.Code);
-        await using var connection = new SqliteConnection($"Data Source={factory.DatabasePath}");
+        await using var connection = factory.Database.CreateConnection();
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM exports;";

@@ -2,9 +2,9 @@ using Application;
 using Dapper;
 using Domain;
 
-namespace Infrastructure.Persistence.Sqlite;
+namespace Infrastructure.Persistence;
 
-public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) : IVotingRepository
+public sealed class VotingRepository(RelationalConnectionFactory connections) : IVotingRepository
 {
     public async Task<VotingCommandResult> SetMyVotesAsync(
         Guid meetingId,
@@ -15,7 +15,7 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = connection.BeginTransaction(deferred: false);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, meetingId, cancellationToken);
         var state = await connection.QuerySingleOrDefaultAsync<VotingStateRow>(
             """
             SELECT m.phase AS Phase, m.version AS Version, m.facilitator_id AS FacilitatorId,
@@ -28,7 +28,7 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
             LEFT JOIN personal_ballots ballot ON ballot.meeting_id = m.id AND ballot.user_id = @UserId
             WHERE m.id = @MeetingId;
             """,
-            new { MeetingId = meetingId.ToString(), UserId = userId.ToString() },
+            new { MeetingId = meetingId, UserId = userId },
             transaction);
         var accessError = CheckMemberAccess(state);
         if (accessError is not null)
@@ -56,9 +56,9 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                UserId = userId.ToString(),
-                TopicId = topicId.ToString(),
+                MeetingId = meetingId,
+                UserId = userId,
+                TopicId = topicId,
             },
             transaction);
         if (topic is null)
@@ -72,7 +72,7 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
         var budget = settings.BudgetFor(originalCardCount);
         var spent = await connection.ExecuteScalarAsync<int>(
             "SELECT COALESCE(SUM(count), 0) FROM votes WHERE meeting_id = @MeetingId AND user_id = @UserId;",
-            new { MeetingId = meetingId.ToString(), UserId = userId.ToString() },
+            new { MeetingId = meetingId, UserId = userId },
             transaction);
         var currentCount = topic.Count ?? 0;
         var remaining = budget - spent;
@@ -101,9 +101,9 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
                 "DELETE FROM votes WHERE meeting_id = @MeetingId AND topic_id = @TopicId AND user_id = @UserId;",
                 new
                 {
-                    MeetingId = meetingId.ToString(),
-                    TopicId = topicId.ToString(),
-                    UserId = userId.ToString(),
+                    MeetingId = meetingId,
+                    TopicId = topicId,
+                    UserId = userId,
                 },
                 transaction);
         }
@@ -118,9 +118,9 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
                 """,
                 new
                 {
-                    MeetingId = meetingId.ToString(),
-                    TopicId = topicId.ToString(),
-                    UserId = userId.ToString(),
+                    MeetingId = meetingId,
+                    TopicId = topicId,
+                    UserId = userId,
                     Count = count,
                 },
                 transaction);
@@ -134,8 +134,8 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                UserId = userId.ToString(),
+                MeetingId = meetingId,
+                UserId = userId,
                 NewVersion = newBallotVersion,
                 ExpectedVersion = expectedBallotVersion,
             },
@@ -162,7 +162,7 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = connection.BeginTransaction(deferred: false);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, meetingId, cancellationToken);
         var state = await connection.QuerySingleOrDefaultAsync<VotingStateRow>(
             """
             SELECT m.phase AS Phase, m.version AS Version, m.facilitator_id AS FacilitatorId,
@@ -175,7 +175,7 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
             LEFT JOIN personal_ballots ballot ON ballot.meeting_id = m.id AND ballot.user_id = @UserId
             WHERE m.id = @MeetingId;
             """,
-            new { MeetingId = meetingId.ToString(), UserId = facilitatorId.ToString() },
+            new { MeetingId = meetingId, UserId = facilitatorId },
             transaction);
         var accessError = CheckMemberAccess(state);
         if (accessError is not null)
@@ -183,7 +183,7 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
             return accessError;
         }
 
-        if (state!.FacilitatorId != facilitatorId.ToString())
+        if (state!.FacilitatorId != facilitatorId)
         {
             return new VotingCommandResult(VotingCommandStatus.Forbidden);
         }
@@ -206,7 +206,7 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
             SELECT COALESCE(MAX(spent), 0) FROM (
                 SELECT user_id, SUM(count) AS spent FROM votes WHERE meeting_id = @MeetingId GROUP BY user_id);
             """,
-            new { MeetingId = meetingId.ToString() },
+            new { MeetingId = meetingId },
             transaction);
         if (budget < minimumBudget)
         {
@@ -240,15 +240,15 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                FacilitatorId = facilitatorId.ToString(),
+                MeetingId = meetingId,
+                FacilitatorId = facilitatorId,
                 VoteMode = settings.Mode.ToString(),
                 VotePercent = settings.Percent,
                 VoteMinimum = settings.Minimum,
                 VoteFixed = settings.Fixed,
                 NewVersion = newVersion,
                 ExpectedVersion = expectedVersion,
-                Now = nowUtc.ToString("O"),
+                Now = nowUtc,
             },
             transaction);
         if (affected == 0)
@@ -286,7 +286,7 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
     {
         public required string Phase { get; init; }
         public int Version { get; init; }
-        public string? FacilitatorId { get; init; }
+        public Guid? FacilitatorId { get; init; }
         public required string VoteMode { get; init; }
         public int VotePercent { get; init; }
         public int VoteMinimum { get; init; }
@@ -298,7 +298,7 @@ public sealed class SqliteVotingRepository(SqliteConnectionFactory connections) 
 
     private sealed class TopicVoteRow
     {
-        public required string TopicId { get; init; }
+        public Guid TopicId { get; init; }
         public int? Count { get; init; }
     }
 }

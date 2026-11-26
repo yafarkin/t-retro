@@ -3,37 +3,39 @@ using Application;
 using Dapper;
 using Domain;
 
-namespace Infrastructure.Persistence.Sqlite;
+namespace Infrastructure.Persistence;
 
-public sealed class SqliteTemplateRepository(SqliteConnectionFactory connections) : ITemplateRepository
+public sealed class TemplateRepository(RelationalConnectionFactory connections) : ITemplateRepository
 {
     public async Task<IReadOnlyList<TemplateDetails>> ListAccessibleAsync(
         Guid userId,
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        await using var transaction = await connections.BeginSnapshotAsync(connection, cancellationToken);
         var rows = (await connection.QueryAsync<TemplateRow>(
             """
             SELECT * FROM templates
             WHERE owner_id = @UserId OR visibility = 'Shared'
             ORDER BY name, id;
             """,
-            new { UserId = userId.ToString() })).ToArray();
+            new { UserId = userId }, transaction)).ToArray();
         if (rows.Length == 0)
         {
             return [];
         }
 
-        var columns = await GetColumnsAsync(
-            connection,
-            null,
-            rows.Select(row => row.Id).ToArray());
+        var columns = (await connection.QueryAsync<TemplateColumnRow>(
+            """
+            SELECT c.* FROM template_columns c
+            JOIN templates t ON t.id = c.template_id
+            WHERE t.owner_id = @UserId OR t.visibility = 'Shared'
+            ORDER BY c.position;
+            """,
+            new { UserId = userId }, transaction)).ToLookup(column => column.TemplateId);
         return rows.Select(row => new TemplateDetails(
             MapTemplate(row),
-            columns.Where(column => column.TemplateId == row.Id)
-                .OrderBy(column => column.Position)
-                .Select(MapColumn)
-                .ToArray())).ToArray();
+            columns[row.Id].Select(MapColumn).ToArray())).ToArray();
     }
 
     public async Task<TemplateDetails?> FindAsync(
@@ -41,15 +43,18 @@ public sealed class SqliteTemplateRepository(SqliteConnectionFactory connections
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
+        await using var transaction = await connections.BeginSnapshotAsync(connection, cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<TemplateRow>(
             "SELECT * FROM templates WHERE id = @TemplateId;",
-            new { TemplateId = templateId.ToString() });
+            new { TemplateId = templateId }, transaction);
         if (row is null)
         {
             return null;
         }
 
-        var columns = await GetColumnsAsync(connection, null, [row.Id]);
+        var columns = await connection.QueryAsync<TemplateColumnRow>(
+            "SELECT * FROM template_columns WHERE template_id = @TemplateId ORDER BY position;",
+            new { TemplateId = templateId }, transaction);
         return new TemplateDetails(MapTemplate(row), columns.Select(MapColumn).ToArray());
     }
 
@@ -83,9 +88,9 @@ public sealed class SqliteTemplateRepository(SqliteConnectionFactory connections
             {
                 template.Name,
                 Visibility = template.Visibility.ToString(),
-                UpdatedAtUtc = template.UpdatedAtUtc.ToString("O"),
-                Id = template.Id.ToString(),
-                OwnerId = ownerId.ToString(),
+                UpdatedAtUtc = template.UpdatedAtUtc,
+                Id = template.Id,
+                OwnerId = ownerId,
             },
             transaction);
         if (affected == 0)
@@ -95,7 +100,7 @@ public sealed class SqliteTemplateRepository(SqliteConnectionFactory connections
 
         await connection.ExecuteAsync(
             "DELETE FROM template_columns WHERE template_id = @TemplateId;",
-            new { TemplateId = template.Id.ToString() },
+            new { TemplateId = template.Id },
             transaction);
         await InsertColumnsAsync(connection, transaction, columns);
         await transaction.CommitAsync(cancellationToken);
@@ -110,20 +115,8 @@ public sealed class SqliteTemplateRepository(SqliteConnectionFactory connections
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
         var affected = await connection.ExecuteAsync(
             "DELETE FROM templates WHERE id = @TemplateId AND owner_id = @OwnerId;",
-            new { TemplateId = templateId.ToString(), OwnerId = ownerId.ToString() });
+            new { TemplateId = templateId, OwnerId = ownerId });
         return affected > 0;
-    }
-
-    private static async Task<TemplateColumnRow[]> GetColumnsAsync(
-        IDbConnection connection,
-        IDbTransaction? transaction,
-        IReadOnlyCollection<string> templateIds)
-    {
-        var rows = await connection.QueryAsync<TemplateColumnRow>(
-            "SELECT * FROM template_columns WHERE template_id IN @TemplateIds ORDER BY position;",
-            new { TemplateIds = templateIds },
-            transaction);
-        return rows.ToArray();
     }
 
     private static async Task InsertTemplateAsync(
@@ -138,12 +131,12 @@ public sealed class SqliteTemplateRepository(SqliteConnectionFactory connections
             """,
             new
             {
-                Id = template.Id.ToString(),
-                OwnerId = template.OwnerId.ToString(),
+                Id = template.Id,
+                OwnerId = template.OwnerId,
                 template.Name,
                 Visibility = template.Visibility.ToString(),
-                CreatedAtUtc = template.CreatedAtUtc.ToString("O"),
-                UpdatedAtUtc = template.UpdatedAtUtc.ToString("O"),
+                CreatedAtUtc = template.CreatedAtUtc,
+                UpdatedAtUtc = template.UpdatedAtUtc,
             },
             transaction);
     }
@@ -162,8 +155,8 @@ public sealed class SqliteTemplateRepository(SqliteConnectionFactory connections
                 """,
                 new
                 {
-                    TemplateId = column.TemplateId.ToString(),
-                    Id = column.Id.ToString(),
+                    TemplateId = column.TemplateId,
+                    Id = column.Id,
                     column.Name,
                     column.Color,
                     column.Position,
@@ -175,17 +168,17 @@ public sealed class SqliteTemplateRepository(SqliteConnectionFactory connections
 
     private static MeetingTemplate MapTemplate(TemplateRow row) =>
         new(
-            Guid.Parse(row.Id),
-            Guid.Parse(row.OwnerId),
+            row.Id,
+            row.OwnerId,
             row.Name,
             Enum.Parse<TemplateVisibility>(row.Visibility),
-            SqliteMapping.Time(row.CreatedAtUtc),
-            SqliteMapping.Time(row.UpdatedAtUtc));
+            row.CreatedAtUtc,
+            row.UpdatedAtUtc);
 
     private static TemplateColumn MapColumn(TemplateColumnRow row) =>
         new(
-            Guid.Parse(row.Id),
-            Guid.Parse(row.TemplateId),
+            row.Id,
+            row.TemplateId,
             row.Name,
             row.Color,
             row.Position,
@@ -193,18 +186,18 @@ public sealed class SqliteTemplateRepository(SqliteConnectionFactory connections
 
     private sealed class TemplateRow
     {
-        public required string Id { get; init; }
-        public required string OwnerId { get; init; }
+        public Guid Id { get; init; }
+        public Guid OwnerId { get; init; }
         public required string Name { get; init; }
         public required string Visibility { get; init; }
-        public required string CreatedAtUtc { get; init; }
-        public required string UpdatedAtUtc { get; init; }
+        public DateTimeOffset CreatedAtUtc { get; init; }
+        public DateTimeOffset UpdatedAtUtc { get; init; }
     }
 
     private sealed class TemplateColumnRow
     {
-        public required string TemplateId { get; init; }
-        public required string Id { get; init; }
+        public Guid TemplateId { get; init; }
+        public Guid Id { get; init; }
         public required string Name { get; init; }
         public required string Color { get; init; }
         public string? Description { get; init; }

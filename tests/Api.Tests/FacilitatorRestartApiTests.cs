@@ -8,13 +8,12 @@ public sealed class FacilitatorRestartApiTests
     [Fact]
     public async Task RestartKeepsOriginalDeadlineAndFirstReturningMemberGetsVacantRole()
     {
-        var directory = Path.Combine(Environment.CurrentDirectory, "TestData", Guid.NewGuid().ToString());
-        var databasePath = Path.Combine(directory, "test.db");
+        using var database = new ApiTestDatabase();
         TRetroWebApplicationFactory? firstFactory = null;
         TRetroWebApplicationFactory? secondFactory = null;
         try
         {
-            firstFactory = new TRetroWebApplicationFactory(databasePath: databasePath);
+            firstFactory = new TRetroWebApplicationFactory(database: database);
             await ApiTestHelpers.MigrateAsync(firstFactory);
             using var firstClient = firstFactory.CreateClient();
             using var secondClient = firstFactory.CreateClient();
@@ -34,7 +33,7 @@ public sealed class FacilitatorRestartApiTests
             firstFactory.Dispose();
             firstFactory = null;
 
-            secondFactory = new TRetroWebApplicationFactory(databasePath: databasePath);
+            secondFactory = new TRetroWebApplicationFactory(database: database);
             secondFactory.Time.SetUtcNow(shutdownTime.AddSeconds(61));
             using var firstAfterRestart = secondFactory.CreateClient();
             using var secondAfterRestart = secondFactory.CreateClient();
@@ -57,10 +56,6 @@ public sealed class FacilitatorRestartApiTests
         {
             firstFactory?.Dispose();
             secondFactory?.Dispose();
-            if (Directory.Exists(directory))
-            {
-                Directory.Delete(directory, true);
-            }
         }
     }
 }

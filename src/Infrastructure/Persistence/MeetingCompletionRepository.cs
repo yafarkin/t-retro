@@ -4,10 +4,10 @@ using Application;
 using Dapper;
 using Domain;
 
-namespace Infrastructure.Persistence.Sqlite;
+namespace Infrastructure.Persistence;
 
-public sealed class SqliteMeetingCompletionRepository(
-    SqliteConnectionFactory connections,
+public sealed class MeetingCompletionRepository(
+    RelationalConnectionFactory connections,
     IMeetingReportGenerator reportGenerator) : IMeetingCompletionRepository
 {
     public async Task<MeetingCommandResult> CompleteAsync(
@@ -20,7 +20,7 @@ public sealed class SqliteMeetingCompletionRepository(
         CancellationToken cancellationToken)
     {
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
-        await using var transaction = connection.BeginTransaction(deferred: false);
+        await using var transaction = await connections.BeginMeetingTransactionAsync(connection, meetingId, cancellationToken);
         var commandState = await connection.QuerySingleOrDefaultAsync<CompletionCommandRow>(
             """
             SELECT m.phase AS Phase, m.version AS Version, m.facilitator_id AS FacilitatorId,
@@ -29,7 +29,7 @@ public sealed class SqliteMeetingCompletionRepository(
             LEFT JOIN members member ON member.meeting_id = m.id AND member.user_id = @UserId
             WHERE m.id = @MeetingId;
             """,
-            new { MeetingId = meetingId.ToString(), UserId = facilitatorId.ToString() },
+            new { MeetingId = meetingId, UserId = facilitatorId },
             transaction);
         if (commandState is null || commandState.MemberStatus is null)
         {
@@ -37,7 +37,7 @@ public sealed class SqliteMeetingCompletionRepository(
         }
 
         if (commandState.MemberStatus == MemberStatus.Excluded.ToString()
-            || commandState.FacilitatorId != facilitatorId.ToString())
+            || commandState.FacilitatorId != facilitatorId)
         {
             return new MeetingCommandResult(MeetingCommandStatus.Forbidden);
         }
@@ -58,7 +58,7 @@ public sealed class SqliteMeetingCompletionRepository(
             return new MeetingCommandResult(MeetingCommandStatus.VersionConflict);
         }
 
-        var current = await SqliteMeetingRepository.ReadStateAsync(connection, meetingId)
+        var current = await MeetingRepository.ReadStateAsync(connection, transaction, meetingId)
             ?? throw new InvalidOperationException("Meeting state is missing during completion.");
         var completed = MeetingCompletionFactory.Create(current, nowUtc);
         var pdf = reportGenerator.Generate(completed);
@@ -79,8 +79,8 @@ public sealed class SqliteMeetingCompletionRepository(
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                ClosedAtUtc = totals.ClosedAtUtc.ToString("O"),
+                MeetingId = meetingId,
+                ClosedAtUtc = totals.ClosedAtUtc,
                 totals.ParticipantCount,
                 totals.CardCount,
                 totals.TopicCount,
@@ -97,8 +97,8 @@ public sealed class SqliteMeetingCompletionRepository(
                 """,
                 new
                 {
-                    MeetingId = meetingId.ToString(),
-                    TopicId = topicTotal.TopicId.ToString(),
+                    MeetingId = meetingId,
+                    TopicId = topicTotal.TopicId,
                     topicTotal.TotalVotes,
                 },
                 transaction);
@@ -108,23 +108,23 @@ public sealed class SqliteMeetingCompletionRepository(
             "INSERT INTO reports (meeting_id, pdf, created_at_utc) VALUES (@MeetingId, @Pdf, @CreatedAtUtc);",
             new
             {
-                MeetingId = meetingId.ToString(),
+                MeetingId = meetingId,
                 Pdf = pdf,
-                CreatedAtUtc = nowUtc.ToString("O"),
+                CreatedAtUtc = nowUtc,
             },
             transaction);
-        var cardPrivacy = new { MeetingId = meetingId.ToString(), AllAnonymous = current.Meeting.AnonymousCards };
+        var cardPrivacy = new { MeetingId = meetingId, AllAnonymous = current.Meeting.AnonymousCards };
         await connection.ExecuteAsync(
             """
             DELETE FROM card_authors WHERE meeting_id = @MeetingId
-              AND (@AllAnonymous OR card_id IN (SELECT id FROM cards WHERE meeting_id = @MeetingId AND anonymous = 1));
+              AND (@AllAnonymous OR card_id IN (SELECT id FROM cards WHERE meeting_id = @MeetingId AND anonymous = TRUE));
             """,
             cardPrivacy,
             transaction);
         await connection.ExecuteAsync(
             """
             DELETE FROM command_deduplication WHERE meeting_id = @MeetingId AND operation_type = 'CreateCard'
-              AND (@AllAnonymous OR anonymous_card = 1);
+              AND (@AllAnonymous OR anonymous_card = TRUE);
             """,
             cardPrivacy,
             transaction);
@@ -134,12 +134,12 @@ public sealed class SqliteMeetingCompletionRepository(
             DELETE FROM votes WHERE meeting_id = @MeetingId;
             DELETE FROM personal_ballots WHERE meeting_id = @MeetingId;
             """,
-            new { MeetingId = meetingId.ToString() },
+            new { MeetingId = meetingId },
             transaction);
 
         await connection.ExecuteAsync(
             "DELETE FROM readiness WHERE meeting_id = @MeetingId;",
-            new { MeetingId = meetingId.ToString() },
+            new { MeetingId = meetingId },
             transaction);
         var newVersion = expectedVersion + 1;
         var affected = await connection.ExecuteAsync(
@@ -155,11 +155,11 @@ public sealed class SqliteMeetingCompletionRepository(
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                FacilitatorId = facilitatorId.ToString(),
+                MeetingId = meetingId,
+                FacilitatorId = facilitatorId,
                 ExpectedVersion = expectedVersion,
                 NewVersion = newVersion,
-                Now = nowUtc.ToString("O"),
+                Now = nowUtc,
             },
             transaction);
         if (affected == 0)
@@ -178,12 +178,12 @@ public sealed class SqliteMeetingCompletionRepository(
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                UserId = facilitatorId.ToString(),
-                OperationId = operationId.ToString(),
+                MeetingId = meetingId,
+                UserId = facilitatorId,
+                OperationId = operationId,
                 Fingerprint = fingerprint,
                 ResultVersion = newVersion,
-                CreatedAtUtc = nowUtc.ToString("O"),
+                CreatedAtUtc = nowUtc,
             },
             transaction);
         await transaction.CommitAsync(cancellationToken);
@@ -195,7 +195,7 @@ public sealed class SqliteMeetingCompletionRepository(
         await using var connection = await connections.CreateOpenConnectionAsync(cancellationToken);
         return await connection.ExecuteScalarAsync<byte[]?>(
             "SELECT pdf FROM reports WHERE meeting_id = @MeetingId;",
-            new { MeetingId = meetingId.ToString() });
+            new { MeetingId = meetingId });
     }
 
     private static async Task<MeetingCommandResult?> FindReplayAsync(
@@ -216,9 +216,9 @@ public sealed class SqliteMeetingCompletionRepository(
             """,
             new
             {
-                MeetingId = meetingId.ToString(),
-                UserId = facilitatorId.ToString(),
-                OperationId = operationId.ToString(),
+                MeetingId = meetingId,
+                UserId = facilitatorId,
+                OperationId = operationId,
             },
             transaction);
         if (row is null)
@@ -235,7 +235,7 @@ public sealed class SqliteMeetingCompletionRepository(
     {
         public required string Phase { get; init; }
         public int Version { get; init; }
-        public string? FacilitatorId { get; init; }
+        public Guid? FacilitatorId { get; init; }
         public string? MemberStatus { get; init; }
     }
 

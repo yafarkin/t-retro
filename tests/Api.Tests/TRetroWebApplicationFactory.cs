@@ -2,16 +2,14 @@ using Api;
 using Application;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Api.Tests;
 
 public sealed class TRetroWebApplicationFactory : WebApplicationFactory<Program>
 {
-    private readonly string directory;
     private readonly string environment;
-    private readonly bool deleteOnDispose;
+    private readonly bool ownsDatabase;
     private readonly bool aiEnabled;
     private readonly bool jiraEnabled;
     private readonly string jiraOutcome;
@@ -19,7 +17,7 @@ public sealed class TRetroWebApplicationFactory : WebApplicationFactory<Program>
 
     public TRetroWebApplicationFactory(
         string environment = "Testing",
-        string? databasePath = null,
+        ApiTestDatabase? database = null,
         bool aiEnabled = true,
         bool jiraEnabled = true,
         string jiraOutcome = "Created",
@@ -31,20 +29,15 @@ public sealed class TRetroWebApplicationFactory : WebApplicationFactory<Program>
         this.jiraEnabled = jiraEnabled;
         this.jiraOutcome = jiraOutcome;
         this.jiraDelayMs = jiraDelayMs;
-        deleteOnDispose = databasePath is null;
-        DatabasePath = databasePath ?? Path.Combine(
-            Environment.CurrentDirectory,
-            "TestData",
-            Guid.NewGuid().ToString(),
-            "test.db");
-        directory = Path.GetDirectoryName(DatabasePath)!;
+        ownsDatabase = database is null;
+        Database = database ?? new ApiTestDatabase(allowPostgreSql: environment == "Testing");
         if (failPdf)
         {
             FailingReportGenerator = new FailingMeetingReportGenerator();
         }
     }
 
-    public string DatabasePath { get; }
+    public ApiTestDatabase Database { get; }
 
     public TestTimeProvider Time { get; } = new();
 
@@ -53,8 +46,8 @@ public sealed class TRetroWebApplicationFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(environment);
-        builder.UseSetting("ConnectionStrings:Default", $"Data Source={DatabasePath}");
-        builder.UseSetting("Database:Provider", "SQLite");
+        builder.UseSetting("ConnectionStrings:Default", Database.ConnectionString);
+        builder.UseSetting("Database:Provider", Database.IsPostgreSql ? "PostgreSQL" : "SQLite");
         builder.UseSetting("DevAuthentication:Enabled", environment == "Testing" ? "true" : "false");
         builder.UseSetting("Integrations:Ai:Enabled", aiEnabled ? "true" : "false");
         builder.UseSetting("Integrations:Jira:Enabled", jiraEnabled ? "true" : "false");
@@ -73,10 +66,9 @@ public sealed class TRetroWebApplicationFactory : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        SqliteConnection.ClearAllPools();
-        if (deleteOnDispose && Directory.Exists(directory))
+        if (disposing && ownsDatabase)
         {
-            Directory.Delete(directory, true);
+            Database.Dispose();
         }
     }
 }
