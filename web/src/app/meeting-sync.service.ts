@@ -1,8 +1,23 @@
-import { computed, HostListener, inject, Injectable, isDevMode, OnDestroy, signal } from '@angular/core';
+import { computed, Injectable, isDevMode, OnDestroy, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { HubConnection, HubConnectionBuilder } from '@microsoft/signalr';
+import { HubConnection, HubConnectionBuilder, IHttpConnectionOptions } from '@microsoft/signalr';
 import { MeetingState } from './meeting.models';
 import { MeetingService } from './meeting.service';
+
+class MeetingWebSocket extends WebSocket {
+  constructor(url: string | URL) {
+    super(url);
+    // Leave time for SignalR to try another transport before the server drops the negotiation.
+    const timeout = setTimeout(() => {
+      if (this.readyState === WebSocket.CONNECTING) {
+        this.close();
+      }
+    }, 4_000);
+    const clearDeadline = () => clearTimeout(timeout);
+    this.addEventListener('open', clearDeadline, { once: true });
+    this.addEventListener('close', clearDeadline, { once: true });
+  }
+}
 
 @Injectable()
 export class MeetingSyncService implements OnDestroy {
@@ -40,8 +55,10 @@ export class MeetingSyncService implements OnDestroy {
     const hubUrl = isDevMode()
       ? `${window.location.protocol}//${window.location.hostname}:5166/hubs/retro`
       : '/hubs/retro';
+    // SignalR accepts a socket constructor at runtime but omits it from its public types.
+    const options: IHttpConnectionOptions & { WebSocket: typeof WebSocket } = { WebSocket: MeetingWebSocket };
     const connection = new HubConnectionBuilder()
-      .withUrl(hubUrl)
+      .withUrl(hubUrl, options)
       .withAutomaticReconnect()
       .build();
     this.connection = connection;
@@ -70,10 +87,11 @@ export class MeetingSyncService implements OnDestroy {
     });
     connection.onclose(() => this.invalidateConnection('disconnected'));
 
-    await connection.start();
-    await this.subscribe(connection);
     this.pollTimer = setInterval(() => void this.refresh(), 15_000);
     this.clockTimer = setInterval(() => this.now.set(Date.now()), 1000);
+    void this.refresh();
+    await connection.start();
+    await this.subscribe(connection);
   }
 
   replaceSnapshot(snapshot: MeetingState): boolean {
@@ -102,7 +120,7 @@ export class MeetingSyncService implements OnDestroy {
       this.refreshAgain = true;
       return;
     }
-    if (!this.meetingId || this.revoked()) {
+    if (!this.connection || this.revoked()) {
       return;
     }
 
@@ -138,12 +156,9 @@ export class MeetingSyncService implements OnDestroy {
     }
   }
 
-  @HostListener('window:pagehide')
-  onPageHide(): void {
-    const connection = this.connection;
-    this.connection = null;
-    if (connection) {
-      void connection.stop();
+  onPageHide(event: PageTransitionEvent): void {
+    if (!event.persisted) {
+      void this.disconnect();
     }
   }
 
@@ -157,12 +172,13 @@ export class MeetingSyncService implements OnDestroy {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
-    if (this.connection) {
-      await this.connection.stop();
-    }
+    await this.disconnect();
   }
 
   private async subscribe(connection: HubConnection): Promise<void> {
+    if (connection !== this.connection) {
+      return;
+    }
     const generation = this.connectionGeneration;
     await connection.invoke('Subscribe', this.meetingId);
     if (connection !== this.connection || generation !== this.connectionGeneration) {
@@ -171,6 +187,15 @@ export class MeetingSyncService implements OnDestroy {
 
     this.subscribed = true;
     await this.refresh();
+  }
+
+  private async disconnect(): Promise<void> {
+    const connection = this.connection;
+    if (connection) {
+      this.connection = null;
+      this.invalidateConnection('disconnected');
+      await connection.stop();
+    }
   }
 
   private invalidateConnection(state: 'reconnecting' | 'disconnected'): void {

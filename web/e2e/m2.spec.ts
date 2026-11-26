@@ -15,6 +15,22 @@ test('M2 presence, live state, role transfer and access revocation synchronize c
   const secondContext = await browser.newContext();
   const first = await firstContext.newPage();
   const second = await secondContext.newPage();
+  await second.addInitScript(() => {
+    // Simulate a browser that accepts the socket request but never opens it.
+    class StalledWebSocket extends EventTarget {
+      static readonly CONNECTING = 0;
+      readyState = StalledWebSocket.CONNECTING;
+      onclose: ((event: CloseEvent) => void) | null = null;
+
+      close(): void {
+        this.readyState = 3;
+        const event = new CloseEvent('close', { code: 1006 });
+        this.dispatchEvent(event);
+        this.onclose?.(event);
+      }
+    }
+    window.WebSocket = StalledWebSocket as unknown as typeof WebSocket;
+  });
   const sockets: { client: WebSocketRoute; server: WebSocketRoute }[] = [];
   await first.routeWebSocket(/\/hubs\/retro\?/, (socket) => {
     sockets.push({ client: socket, server: socket.connectToServer() });
@@ -38,7 +54,13 @@ test('M2 presence, live state, role transfer and access revocation synchronize c
 
   await second.goto(invite);
   await second.getByRole('button', { name: 'Вступить во встречу' }).click();
-  await expect(second.getByRole('heading', { name: 'Ретро M2 realtime', exact: true })).toBeVisible();
+  await expect(second.getByRole('heading', { name: 'Ретро M2 realtime', exact: true })).toBeVisible({ timeout: 2_000 });
+  await expect(second.getByText('Изменения временно заблокированы.', { exact: false })).toBeVisible();
+  await expect(second.getByText('Изменения временно заблокированы.', { exact: false })).toHaveCount(0, { timeout: 10_000 });
+  await second.reload();
+  await expect(second.getByRole('heading', { name: 'Ретро M2 realtime', exact: true })).toBeVisible({ timeout: 2_000 });
+  await expect(second.getByText('Изменения временно заблокированы.', { exact: false })).toBeVisible();
+  await expect(second.getByText('Изменения временно заблокированы.', { exact: false })).toHaveCount(0, { timeout: 10_000 });
   await expect(second.getByRole('banner').getByRole('heading', { name: 'Ретро M2 realtime' })).toBeVisible();
   await expect(second.getByRole('main').getByRole('link', { name: /Мои встречи/ })).toHaveCount(0);
   await expect(second.getByText('Фасилитатор Первый M2.', { exact: true })).toBeVisible();

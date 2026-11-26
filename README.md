@@ -114,6 +114,8 @@ export NUGET_PACKAGES="$PWD/.tools/nuget/packages"
 
 При локальном запуске через `ng serve` SignalR подключается напрямую к API на порт 5166. CORS с credentials разрешён только для `localhost:4200` и `127.0.0.1:4200`; Vite проксирует HTTP `/api`, `/health` и `/openapi`, но не выступает WebSocket-прокси. При закрытии страницы приложение останавливает SignalR через `pagehide`. Собранный Angular подключается к SignalR по тому же адресу, на котором открыта страница.
 
+При открытии встречи доска загружается по HTTP параллельно с подключением SignalR. Если WebSocket не открывается за 4 секунды, SignalR пробует запасной транспорт. Команды становятся доступны после подписки и свежего снимка встречи.
+
 Для push и pull request GitHub Actions запускает `tools/build.sh` на `ubuntu-latest` x86_64. В workflow добавлен второй прогон API и Playwright с отдельным сервисом PostgreSQL 18. Проверку конкретного коммита можно найти по его SHA. [Конфигурация CI](.github/workflows/ci.yml)
 
 ## Запуск через Docker Compose

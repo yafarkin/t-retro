@@ -64,6 +64,7 @@ const EMPTY_DISCUSSION_DRAFT: DiscussionDraft = { kind: 'comments', text: '', de
 
 @Component({
   selector: 'app-meeting-settings-page',
+  host: { '(window:pagehide)': 'sync.onPageHide($event)' },
   imports: [FormsModule, NgTemplateOutlet, MeetingForm, MeetingInvite, MeetingTimerControls, MeetingTopicVotes, TuiButton],
   providers: [MeetingSyncService],
   templateUrl: './meeting-settings-page.html',
