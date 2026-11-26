@@ -1,3 +1,5 @@
+using Domain;
+
 namespace Application;
 
 public sealed class MeetingReportService(
@@ -12,5 +14,19 @@ public sealed class MeetingReportService(
         await access.GetAsync(userId, meetingId, false, cancellationToken);
         return await completion.GetReportAsync(meetingId, cancellationToken)
             ?? throw new NotFoundException("Отчёт будет доступен после завершения встречи.");
+    }
+
+    public async Task<MeetingSnapshot> GetCompletedSnapshotAsync(
+        Guid userId,
+        Guid meetingId,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = await access.GetAsync(userId, meetingId, false, cancellationToken);
+        if (snapshot.Meeting.Phase != MeetingPhase.Closed || snapshot.Completion is null)
+        {
+            throw new NotFoundException("Отчёт будет доступен после завершения встречи.");
+        }
+
+        return snapshot;
     }
 }

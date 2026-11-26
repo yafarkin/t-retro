@@ -146,6 +146,13 @@ test('M9 results board, read-only discussion, permanent PDF and facilitator arch
   expect(firstPdf.subarray(0, 5).toString()).toBe('%PDF-');
   expect(firstPdf.equals(secondPdf)).toBe(true);
 
+  const jsonLink = second.locator('.meeting-toolbar').getByRole('link', { name: 'Скачать JSON' });
+  const downloadPromise = second.waitForEvent('download');
+  await jsonLink.click();
+  const jsonDownload = await downloadPromise;
+  expect(jsonDownload.suggestedFilename()).toBe('retro-results.json');
+  expect(await jsonDownload.failure()).toBeNull();
+
   const meetingUrl = first.url();
   const archiveUrl = new URL(meetingUrl);
   archiveUrl.pathname = '/api' + archiveUrl.pathname + '/archive';

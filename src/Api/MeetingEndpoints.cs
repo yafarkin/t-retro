@@ -65,6 +65,17 @@ public static class MeetingEndpoints
             context.Response.Headers["Cache-Control"] = "private, no-store";
             return Results.File(report, "application/pdf");
         });
+        meetings.MapGet("/{meetingId:guid}/report.json", async (
+            Guid meetingId,
+            ClaimsPrincipal user,
+            MeetingReportService service,
+            HttpContext context,
+            CancellationToken cancellationToken) =>
+        {
+            var snapshot = await service.GetCompletedSnapshotAsync(CurrentUser.Id(user), meetingId, cancellationToken);
+            context.Response.Headers["Cache-Control"] = "private, no-store";
+            return Results.File(MeetingJsonReport.Serialize(snapshot), "application/json", "retro-results.json");
+        });
         meetings.MapPut("/{meetingId:guid}/settings", async (
             Guid meetingId,
             UpdateMeetingSettingsRequest request,

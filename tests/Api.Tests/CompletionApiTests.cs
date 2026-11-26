@@ -28,6 +28,8 @@ public sealed class CompletionApiTests
             "Ретро с итогами");
         var missing = await facilitator.GetAsync($"/api/meetings/{setup.State.Id}/report.pdf");
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        var jsonUrl = $"/api/meetings/{setup.State.Id}/report.json";
+        Assert.Equal(HttpStatusCode.NotFound, (await facilitator.GetAsync(jsonUrl)).StatusCode);
 
         var operationId = Guid.NewGuid();
         var request = new AdvanceMeetingRequest
@@ -85,6 +87,58 @@ public sealed class CompletionApiTests
         var memberReport = await memberSession.GetAsync($"/api/meetings/{setup.State.Id}/report.pdf");
         memberReport.EnsureSuccessStatusCode();
         Assert.Equal(pdf, await memberReport.Content.ReadAsByteArrayAsync());
+
+        using var jsonResponse = await facilitator.GetAsync(jsonUrl);
+        jsonResponse.EnsureSuccessStatusCode();
+        Assert.Equal("application/json", jsonResponse.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("attachment", jsonResponse.Content.Headers.ContentDisposition!.DispositionType);
+        Assert.Equal("retro-results.json", jsonResponse.Content.Headers.ContentDisposition.FileNameStar);
+        Assert.True(jsonResponse.Headers.CacheControl!.Private);
+        Assert.True(jsonResponse.Headers.CacheControl.NoStore);
+        var json = await jsonResponse.Content.ReadAsByteArrayAsync();
+        Assert.Equal(json, await memberSession.GetByteArrayAsync(jsonUrl));
+        using (var report = JsonDocument.Parse(json))
+        {
+            var root = report.RootElement;
+            Assert.Equal(
+                ["name", "createdAtUtc", "closedAtUtc", "participantCount", "cardCount", "topicCount", "voteCount", "columns", "topics"],
+                root.EnumerateObject().Select(field => field.Name));
+            Assert.Equal("Ретро с итогами", root.GetProperty("name").GetString());
+            Assert.Equal(2, root.GetProperty("participantCount").GetInt32());
+            Assert.Equal(3, root.GetProperty("cardCount").GetInt32());
+            Assert.Equal(2, root.GetProperty("topicCount").GetInt32());
+            Assert.Equal(3, root.GetProperty("voteCount").GetInt32());
+            Assert.Equal(closed.Totals.ClosedAtUtc, root.GetProperty("closedAtUtc").GetDateTimeOffset());
+            var columns = root.GetProperty("columns");
+            Assert.Equal(closed.Columns.Select(column => column.Name), columns.EnumerateArray()
+                .Select(column => column.GetProperty("name").GetString()));
+            Assert.All(columns.EnumerateArray(), column => Assert.Equal(
+                ["position", "name", "color", "description"], column.EnumerateObject().Select(field => field.Name)));
+            var topics = root.GetProperty("topics");
+            Assert.All(topics.EnumerateArray(), topic =>
+            {
+                Assert.Equal(
+                    ["kind", "title", "columnPosition", "totalVotes", "status", "cards", "comments", "decisions", "tasks"],
+                    topic.EnumerateObject().Select(field => field.Name));
+                Assert.All(topic.GetProperty("cards").EnumerateArray(), card => Assert.Equal(
+                    ["text", "originalColumnColor"], card.EnumerateObject().Select(field => field.Name)));
+                Assert.All(topic.GetProperty("tasks").EnumerateArray(), task => Assert.Equal(
+                    ["title", "description"], task.EnumerateObject().Select(field => field.Name)));
+            });
+            Assert.Equal("group", topics[0].GetProperty("kind").GetString());
+            Assert.Equal("Группа улучшений", topics[0].GetProperty("title").GetString());
+            Assert.Equal(3, topics[0].GetProperty("totalVotes").GetInt32());
+            Assert.Equal("discussed", topics[0].GetProperty("status").GetString());
+            Assert.Equal(2, topics[0].GetProperty("cards").GetArrayLength());
+            Assert.Equal("Комментарий к теме", topics[0].GetProperty("comments")[0].GetString());
+            Assert.Equal("Решение по команде", topics[0].GetProperty("decisions")[0].GetString());
+            var task = topics[0].GetProperty("tasks")[0];
+            Assert.Equal("Задача после ретро", task.GetProperty("title").GetString());
+            Assert.Equal("Описание задачи для отчёта", task.GetProperty("description").GetString());
+            Assert.Equal("Нулевая тема", topics[1].GetProperty("cards")[0].GetProperty("text").GetString());
+            Assert.Equal(0, topics[1].GetProperty("totalVotes").GetInt32());
+        }
+
         using (var document = PdfDocument.Open(pdf))
         {
             var text = string.Join('\n', document.GetPages().Select(page => page.Text));
@@ -123,6 +177,9 @@ public sealed class CompletionApiTests
         Assert.Equal(HttpStatusCode.Forbidden, (await excluded.GetAsync($"/api/meetings/{setup.State.Id}/report.pdf")).StatusCode);
         using var anonymous = factory.CreateClient();
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync($"/api/meetings/{setup.State.Id}/report.pdf")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await outsider.GetAsync(jsonUrl)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await excluded.GetAsync(jsonUrl)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(jsonUrl)).StatusCode);
     }
 
     [Fact]
@@ -187,6 +244,9 @@ public sealed class CompletionApiTests
         var pdf = await facilitator.GetByteArrayAsync($"/api/meetings/{created.Id}/report.pdf");
         using var document = PdfDocument.Open(pdf);
         Assert.Contains("Тем для обсуждения нет", string.Join('\n', document.GetPages().Select(page => page.Text)));
+        using var json = JsonDocument.Parse(await facilitator.GetByteArrayAsync($"/api/meetings/{created.Id}/report.json"));
+        Assert.Equal(0, json.RootElement.GetProperty("voteCount").GetInt32());
+        Assert.Empty(json.RootElement.GetProperty("topics").EnumerateArray());
     }
 
     [Fact]
